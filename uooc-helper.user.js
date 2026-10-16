@@ -9,8 +9,6 @@
 // @license      GPL-3.0-or-later
 // @homepageURL  https://github.com/Uooc-Nanashi/uooc-helper
 // @supportURL   https://github.com/Uooc-Nanashi/uooc-helper/issues
-// @downloadURL  https://raw.githubusercontent.com/Uooc-Nanashi/uooc-helper/main/uooc-helper.user.js
-// @updateURL    https://raw.githubusercontent.com/Uooc-Nanashi/uooc-helper/main/uooc-helper.user.js
 // @match        *://www.uooc.net.cn/*
 // @match        *://uooc.net.cn/*
 // @match        *://*.uooc.net.cn/*

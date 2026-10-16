@@ -39,7 +39,7 @@ Tampermonkey / Violentmonkey / ScriptCat 用户脚本，用于优课在线（UOO
 
 管理器会弹出安装确认页，点「安装」或「确定」即可。
 
-**方式二：手动安装**（一键安装失败时用）
+**方式二：手动安装**（推荐，一键安装失败时使用）
 
 1. 打开 [脚本源码](https://github.com/Uooc-Nanashi/uooc-helper/blob/main/uooc-helper.user.js)
 2. 全选 `Ctrl+A`，复制 `Ctrl+C`

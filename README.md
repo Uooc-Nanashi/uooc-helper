@@ -42,10 +42,10 @@ Tampermonkey / Violentmonkey / ScriptCat 用户脚本，用于优课在线（UOO
 **方式二：手动安装**（一键安装失败时用）
 
 1. 打开 [脚本源码](https://github.com/Uooc-Nanashi/uooc-helper/blob/main/uooc-helper.user.js)
-2. 全选`Ctrl+A`，复制 `Ctrl+C`
+2. 全选 `Ctrl+A`，复制 `Ctrl+C`
 3. 在拓展页里点击管理器图标 → 「添加新脚本」/「新建脚本」
-4. 全选删掉默认模板，粘贴`Ctrl+V` 脚本
-5. 保存`Ctrl+S` 
+4. 全选删掉默认模板，粘贴 `Ctrl+V` 脚本
+5. 保存 `Ctrl+S` 
 
 ### 安装后
 
@@ -55,8 +55,8 @@ Tampermonkey / Violentmonkey / ScriptCat 用户脚本，用于优课在线（UOO
 
 1. 打开任意课程页`uooc.net.cn`
 2. 页面右下角出现「UOOC 学习助手」面板
-3. 首次使用：`设置 / 智能闯关设置 / AI 方案`，选择脚本内置的 DeepSeek 网页版或豆包网页版方案，或打开`管理 AI 方案`，根据文档自行配置网页版和 API 方案。
-4. 如果需要脚本完全自动化，推荐将`设置 / 智能闯关设置 / 提交方式`改为`自动提交`
+3. 首次使用：进入 `设置 / 智能闯关设置 / AI 方案`，选择脚本内置的 DeepSeek 网页版或豆包网页版方案，或打开 `管理 AI 方案`，根据文档自行配置网页版和 API 方案。
+4. 如果需要脚本完全自动化，推荐将 `设置 / 智能闯关设置 / 提交方式` 改为 `自动提交`
 5. 点击「▶ 开始递归」
 
 ## 数据安全

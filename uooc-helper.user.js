@@ -223,7 +223,7 @@
                document.querySelector(".video-js video") ||
                document.querySelector("video");
     }
-    /* 【v2.12.25】收集含 iframe 的 outerHTML，用于「复制当前页 outerHTML」 */
+    /* 收集含 iframe 的 outerHTML，用于「复制当前页 outerHTML」 */
     async function collectOuterHTMLWithIframes() {
         const clone = document.documentElement.cloneNode(true);
 
@@ -329,7 +329,7 @@
         if (!ok) throw new Error("剪贴板写入失败，请确认页面处于聚焦状态");
         return true;
     }
-    /* 【v2.12.21】主页面内 JSON 代码渲染（与 AI 方案管理器文档视图同款）
+    /* 主页面内 JSON 代码渲染（与 AI 方案管理器文档视图同款）
        注意：本函数刻意不使用任何含有双反斜杠的正则，避免改动点在复制过程中被破坏 */
     function _renderCodeHTML(text) {
         try {
@@ -418,7 +418,7 @@
         saveSettings(_settings);
         return _settings;
     }
-    /* 【v2.12.21】提交方式以全局设置为权威来源。
+    /* 提交方式以全局设置为权威来源。
        历史上曾存在 QuizCache（按课程存储）里，导致切换课程后偏好丢失、
        课程 ID 未识别时无法保存。现统一以 settings.submitMode 为准，
        QuizCache 中的同名字段仅作为向后兼容写入。 */
@@ -525,7 +525,7 @@
             #uooc-helper-panel .uooc-scroll::-webkit-scrollbar-corner {
                 background: #161c22;
             }
-            /* 【v2.12.x】日志允许选中复制 */
+            /* 日志允许选中复制 */
             #uooc-helper-panel .uooc-selectable,
             #uooc-helper-panel .uooc-selectable * {
                 -webkit-user-select: text !important;
@@ -533,9 +533,9 @@
                 cursor: text;
                 -webkit-touch-callout: default;
             }
-            /* 【v2.12.13】子页面打开时抬高面板高度 */
+            /* 子页面打开时抬高面板高度 */
             #uooc-helper-panel.uooc-subpage-open { min-height: 70vh; }
-            /* 【v2.12.3】设置页卡片容器 */
+            /* 设置页卡片容器 */
             #uooc-helper-panel .uooc-card {
                 background: #1a2028;
                 border: 1px solid #2a2f36;
@@ -551,7 +551,7 @@
                 padding: 3px 5px 6px;
                 border-bottom: 1px solid #2a2f36;
             }
-            /* 【v2.12.8】设置项悬浮高亮 */
+            /* 设置项悬浮高亮 */
             #uooc-helper-panel .uooc-setting-row {
                 padding: 6px;
                 border-radius: 6px;
@@ -565,7 +565,7 @@
                 transition: box-shadow .15s;
             }
             #uooc-helper-panel .uooc-toggle-label:hover { box-shadow: 0 0 0 4px rgba(255,255,255,0.15); }
-            /* 【v2.12.23】设置页控件：桌面端最小高度 30px */
+            /* 设置页控件：桌面端最小高度 30px */
             #uooc-helper-panel .uooc-setting-row input[type="number"],
             #uooc-helper-panel .uooc-setting-row select {
                 min-height: 30px;
@@ -575,7 +575,7 @@
                 transition: background .15s;
             }
             #uooc-helper-panel .uooc-extlink-icon:hover { background: rgba(255,255,255,0.15); }
-            /* 【v2.12.24】AI 方案选择框 + 刷新按钮 */
+            /* AI 方案选择框 + 刷新按钮 */
             #uooc-helper-panel .select-refresh-row { display:flex; gap:6px; align-items:stretch; }
             #uooc-helper-panel .select-refresh-btn { width:26px; flex:0 0 auto; padding:0; border:1px solid #2a2f36; background:#0d1014; color:#e6e6e6; border-radius:7px; cursor:pointer; display:flex; align-items:center; justify-content:center; line-height:0; transition:background .15s, color .15s; min-height:var(--uooc-touch-hit); }
             #uooc-helper-panel .select-refresh-btn svg { display:block; }
@@ -586,7 +586,7 @@
                 100% { transform: rotate(360deg); }
             }
             #uooc-helper-panel .select-refresh-btn.spinning svg { animation: uooc-refresh-spin .7s cubic-bezier(.34,1.3,.64,1); }
-            /* 【v2.12.22】数值/选项设置项悬浮变亮 */
+            /* 数值/选项设置项悬浮变亮 */
             #uooc-helper-panel input[type="number"],
             #uooc-helper-panel select {
                 transition: background .15s, border-color .15s, box-shadow .15s;
@@ -597,7 +597,7 @@
                 border-color: #3a4a56;
                 box-shadow: 0 0 0 3px rgba(255,255,255,0.08);
             }
-            /* 【v2.12.22】数值/选项设置项悬浮变亮 */
+            /* 数值/选项设置项悬浮变亮 */
             #uooc-helper-panel input[type="number"],
             #uooc-helper-panel select {
                 transition: background .15s, border-color .15s, box-shadow .15s;
@@ -608,7 +608,7 @@
                 border-color: #3a4a56;
                 box-shadow: 0 0 0 3px rgba(255,255,255,0.08);
             }
-            /* 【v2.12.21】缓存查看用 JSON 代码渲染 */
+            /* 缓存查看用 JSON 代码渲染 */
             #uooc-helper-panel .code-render { font-family: "JetBrains Mono", "Consolas", monospace; font-size: 11.5px; line-height: 1.7; background: #0d1117; border: 1px solid #21262d; border-radius: 6px; padding: 10px 0; overflow: auto; color: #c9d1d9; }
             #uooc-helper-panel .code-render .cl { position: relative; padding-left: calc(46px + var(--indent, 0) * 18px); padding-right: 16px; white-space: pre; min-height: 1.7em; }
             #uooc-helper-panel .code-render .cl:hover { background: rgba(255,255,255,0.03); }
@@ -868,7 +868,7 @@
             return document.querySelectorAll(".ds-assistant-message-main-content");
         }
         function isGenerating() {
-            /* 【v2.12.25】优先检查停止按钮（豆包：chat_input_local_break_button 出现即视为生成中） */
+            /* 优先检查停止按钮（豆包：chat_input_local_break_button 出现即视为生成中） */
             try {
                 const stopSel = String(_method.selectors.stopBtn || "").trim();
                 if (stopSel) {
@@ -889,7 +889,7 @@
             return false;
         }
 
-        /* 【v2.12.25】输入框读写：兼容 textarea / input 与 contenteditable（豆包 ProseMirror） */
+        /* 输入框读写：兼容 textarea / input 与 contenteditable（豆包 ProseMirror） */
         function _isContentEditable(input) {
             if (!input) return false;
             if (input.isContentEditable === true) return true;
@@ -1295,7 +1295,7 @@
             }
         });
 
-        /* 【v2.12.27】统一桥接器徽标（webpage 方案通用；方案可通过 config.badge 覆盖） */
+        /* 统一桥接器徽标（webpage 方案通用；方案可通过 config.badge 覆盖） */
         const _BADGE_DEFAULTS = {
             enabled: true,
             titlePrefix: "UOOC 桥接器",
@@ -1487,7 +1487,7 @@
         let lastKnownUrl = "";
         let currentMethod = null;
         let configSent = false;
-        /* 【v2.12.19 修复】用内部变量记录 popup 对应的 methodId，
+        /* 【修复】用内部变量记录 popup 对应的 methodId，
            不再向跨域的 popup 挂自定义属性（会被同源策略拦截） */
         let popupMethodId = null;
 
@@ -1507,7 +1507,7 @@
                 "请检查地址栏右侧的弹窗拦截提示，并确认 Tampermonkey 未把该 AI 域名加入「排除的域名」。"
             );
             popupMethodId = currentMethod.id;
-            /* 【v2.12.19】立即 focus，避免被浏览器放到后台导致 JS 暂停 */
+            /* 立即 focus，避免被浏览器放到后台导致 JS 暂停 */
             try { popup.focus(); } catch (e) {}
             ready = false;
             lastKnownUrl = "";
@@ -1558,7 +1558,7 @@
 
         async function _waitReady(timeoutMs) {
             if (!currentMethod) throw new Error("没有可用的 AI 方案");
-            /* 【v2.12.19】默认超时提升到 30 秒，兼容慢加载环境 */
+            /* 默认超时提升到 30 秒，兼容慢加载环境 */
             const limit = timeoutMs || (currentMethod.wait && currentMethod.wait.readyMs) || 30000;
             const t0 = Date.now();
             let tick = 0;
@@ -1566,7 +1566,7 @@
             _log(`等待 AI 桥接器就绪（上限 ${Math.round(limit / 1000)} 秒）…`);
             while (Date.now() - t0 < limit) {
                 if (!popup || popup.closed) throw new Error("AI 窗口已关闭");
-                /* 【v2.12.26】每 1.5 秒重发一次 CONFIG，确保桥接器收到最新 selectors/wait */
+                /* 每 1.5 秒重发一次 CONFIG，确保桥接器收到最新 selectors/wait */
                 if (Date.now() - _lastConfigSentAt > 1500) {
                     _sendConfig();
                     _lastConfigSentAt = Date.now();
@@ -1790,7 +1790,7 @@
     /* 兼容别名：QuizSolver 中所有对 LLM_BRIDGE 的引用继续有效 */
     const LLM_BRIDGE = MethodBridge;
 
-    /* 【v2.12.19】把 MethodBridge 的日志转发到 UI 面板 */
+    /* 把 MethodBridge 的日志转发到 UI 面板 */
     if (typeof MethodBridge.onLog === "function") {
         MethodBridge.onLog((msg) => {
             try { if (typeof UI !== "undefined" && UI.log) UI.log("[AI] " + msg, "debug"); } catch (e) {}
@@ -2211,7 +2211,7 @@
         function _setStatus(t) { if (onChange) onChange("status", t); }
         function _setProgress(done, total) { if (onChange) onChange("progress", done, total); }
 
-        /* 【v2.12.26】校验答案是否真的被填充到页面上 */
+        /* 校验答案是否真的被填充到页面上 */
         function _verifyAnswerFilled(q, ans) {
             if (!ans || !q || !q.boxEl) return false;
             try {
@@ -2676,7 +2676,7 @@
                 _setProgress(i + 1, questions.length);
             }
 
-            /* 【v2.12.26】自动提交前校验：找出答案为 null 或未成功填充的题目，最多重试 3 次 */
+            /* 自动提交前校验：找出答案为 null 或未成功填充的题目，最多重试 3 次 */
             const _MAX_RETRY = 3;
             let unresolvedIdx = [];
             for (let i = 0; i < questions.length; i++) {
@@ -2778,7 +2778,7 @@
         let _quizFillAnswerRunning = false;
         let _quizCompletedOnce = false;
         let _quizCompletedResetTimer = null;
-        /* 【v2.12.21】递归当前是否正在处理测验任务点。
+        /* 递归当前是否正在处理测验任务点。
            用于在递归运行中（自动提交开启）时让智能答题按钮先显示"等待递归进程…"，
            到测验任务点后切回正常显示并同步测验完成进度。 */
         let _recursiveAtQuiz = false;
@@ -3044,7 +3044,7 @@
 
         function paintQuizButton() {
             const mutexBusy = _anyMutexRunningCb && _anyMutexRunningCb();
-            /* 【v2.12.21】递归运行中且自动提交开启、尚未运行到测验任务点时，
+            /* 递归运行中且自动提交开启、尚未运行到测验任务点时，
                按钮提示"等待递归进程运行到测验任务点"。
                - _isAutoSubmit() 每次都读取最新设置，用户中途改设置会立即生效。
                - _recursiveAtQuiz 由主脚本在进入 / 离开测验任务点时设置。 */
@@ -3117,12 +3117,12 @@
 
         function setQuizFillProgress(done, total) {
             const pct = total ? Math.round(done / total * 100) : 0;
-            /* 【v2.12.21】递归进入测验时同样更新填充宽度与文案 */
+            /* 递归进入测验时同样更新填充宽度与文案 */
             if (_quizFillAnswerRunning || _recursiveAtQuiz) chQuizBtnFill.style.width = pct + "%";
             chStatusText.textContent = `状态：正在答题中 (${done}/${total})`;
             statusText.textContent = `状态：正在答题中 (${done}/${total})`;
         }
-        /* 【v2.12.20】智能答题状态变化时，同步刷新其他按钮的互斥禁用 */
+        /* 智能答题状态变化时，同步刷新其他按钮的互斥禁用 */
         function setQuizButtonRunning(v) {
             _quizFillAnswerRunning = !!v;
             if (!v && !_quizCompletedOnce) chQuizBtnFill.style.width = "0%";
@@ -7230,7 +7230,7 @@ textarea, pre, .report-body { flex: 1; background: #0d1117; color: #e6e6e6; bord
     setInterval(clearShader, 800);
 
     let lastQuizQuestion = null;
-    /* 【v2.12.21 修复】同一视频内匹配失败的题目只记录一次，避免每 500ms 刷屏日志 */
+    /* 同一视频内匹配失败的题目只记录一次，避免每 500ms 刷屏日志 */
     let _quizNoMatchLogged = new Set();
     function autoAnswerQuiz() {
         const quizLayer = document.querySelector("#quizLayer");
@@ -7463,7 +7463,7 @@ textarea, pre, .report-body { flex: 1; background: #0d1117; color: #e6e6e6; bord
             optBEnabled = realItems.some(it => !it.complete);
         }
 
-        /* 【v2.12.21 修复】auto 模式下脚本会处理非视频任务点，"全部完成 / 未被限制任务点已完成"
+        /* auto 模式下脚本会处理非视频任务点，"全部完成 / 未被限制任务点已完成"
            的判断应基于所有任务点，而不是仅基于视频任务点。
            否则只要视频都完成，即便还有未完成的测验任务点，
            按钮也会错误显示"【未被限制的】任务点已全部完成"并禁用。
@@ -7989,7 +7989,7 @@ textarea, pre, .report-body { flex: 1; background: #0d1117; color: #e6e6e6; bord
             return -1;
         }
 
-        /* 【v2.12.21 修复】auto 模式下，无论用户选的是 A 还是 B，都从第一个未完成项开始。
+        /* auto 模式下，无论用户选的是 A 还是 B，都从第一个未完成项开始。
            原因：mode B 从"最后一个已完成项之后"查找时，如果剩余未完成项位于更前面
            （例如最后一个已完成视频是 1.5 节，而未完成项位于 1.5 之前的某个测验），
            就会返回 -1，导致递归立即结束、表现为"点击开始递归无反应"。
@@ -8088,7 +8088,7 @@ textarea, pre, .report-body { flex: 1; background: #0d1117; color: #e6e6e6; bord
         await sleep(1500);
 
         if (item.type === "测验") {
-            /* 【v2.12.21】通知 UI：递归已运行到测验任务点。
+            /* 通知 UI：递归已运行到测验任务点。
                按钮切回"智能答题（当前选中任务点）"，并显示题目处理进度。
                无论 QuizSolver.start() 正常返回还是抛异常，最后都会复位。
                QuizSolver.start() 内部会：
@@ -8791,7 +8791,7 @@ textarea, pre, .report-body { flex: 1; background: #0d1117; color: #e6e6e6; bord
         else if (evt === "progress") UI.setQuizFillProgress(a, b);
     });
 
-    /* 【v2.12.24】HTTP 类型的通信细节转发到智能闯关日志 */
+    /* HTTP 类型的通信细节转发到智能闯关日志 */
     if (typeof LLM_BRIDGE.onQuizLog === "function") {
         LLM_BRIDGE.onQuizLog((msg, type) => {
             try { UI.appendQuizLog("[API] " + msg, type || "debug"); } catch (e) {}

@@ -4,6 +4,7 @@
 // @version      1.0.0.m
 // @description  UOOC “学习助手”（专门适配优课联盟 / 优课在线 ）| 提供无需API的完全免费方案 · 开源 · 非商业 | 优化课程完成 · 优化视频播放 · 适配测验任务点（大模型网页版 + API 双方案）· 内置功能修复与扩展工具
 // @author       Uooc-Nanashi
+// @tag          uooc study-helper efficiency
 // @downloadURL  https://raw.githubusercontent.com/Uooc-Nanashi/uooc-helper/main/uooc-helper.user.js
 // @updateURL    https://raw.githubusercontent.com/Uooc-Nanashi/uooc-helper/main/uooc-helper.user.js
 // @license      GPL-3.0-or-later

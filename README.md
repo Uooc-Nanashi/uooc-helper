@@ -2,16 +2,16 @@
 
 [![安装脚本](https://img.shields.io/badge/安装-uooc--helper.user.js-green)](https://raw.githubusercontent.com/Uooc-Nanashi/uooc-helper/main/uooc-helper.user.js)
 
-Tampermonkey / Violentmonkey 用户脚本，用于优课在线（UOOC）学习平台。
+Tampermonkey / Violentmonkey / ScriptCat用户脚本，用于优课在线（UOOC）学习平台。
 
 ## 功能
 
 - 课程目录递归扫描、断点续扫
 - 视频自动播放（可调速）
-- 智能答题：支持 DeepSeek 网页版、豆包网页版、OpenAI 兼容 API
+- 智能答题：内置 DeepSeek 网页版、豆包网页版支持，也支持导入 OpenAI 兼容 API
 - 自动提交测验（含智能验证）
-- 扫描结果本地缓存
-- AI 方案管理器 + 代码改动应用器
+- 完善的本地缓存系统，避免遍历操作过多导致资源浪费
+- 适配AI自动化修复/拓展脚本功能的代码改动应用器：当网页结构布局更改时，可零基础自行使用AI修复，无需等待更新
 
 ## 安装
 
@@ -23,8 +23,8 @@ Tampermonkey / Violentmonkey 用户脚本，用于优课在线（UOOC）学习�
 
 1. 打开任意课程页面（uooc.net.cn）
 2. 页面右下角出现「UOOC 学习助手」面板
-3. 首次使用：设置 ⚙️ → AI 方案，选 DeepSeek 网页版或配置 API
-4. 点「▶ 开始递归」
+3. 首次使用：设置 ⚙️ → AI 方案，选 DeepSeek 网页版或豆包网页版，或自行配置 API
+4. 点击「▶ 开始递归」
 
 ## 数据安全
 

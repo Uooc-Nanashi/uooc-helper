@@ -2,7 +2,7 @@
 // @name         UOOC 学习助手
 // @namespace    https://github.com/Uooc-Nanashi/uooc-helper
 // @version      1.0.0
-// @description  UOOC 学习助手（优课联盟 / 优课在线）| 免费开源 | 全自动完成课程 · 视频自动播放 · 智能完成测验（大模型网页版 + API 双方案）· 支持 AI 辅助修复与功能扩展
+// @description  UOOC 刷课脚本（专门适配优课联盟 / 优课在线 ）| 提供无需API的完全免费方案 · 开源 · 非商业 | 全自动完成课程 · 视频自动播放 · 智能完成测验（大模型网页版 + API 双方案）· 内置功能修复与扩展工具
 // @author       Uooc-Nanashi
 // @downloadURL  https://raw.githubusercontent.com/Uooc-Nanashi/uooc-helper/main/uooc-helper.user.js
 // @updateURL    https://raw.githubusercontent.com/Uooc-Nanashi/uooc-helper/main/uooc-helper.user.js

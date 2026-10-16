@@ -2,7 +2,7 @@
 
 [![安装脚本](https://img.shields.io/badge/安装-uooc--helper.user.js-green)](https://raw.githubusercontent.com/Uooc-Nanashi/uooc-helper/main/uooc-helper.user.js)
 
-Tampermonkey / Violentmonkey / ScriptCat用户脚本，用于优课在线（UOOC）学习平台。
+Tampermonkey / Violentmonkey / ScriptCat 用户脚本，用于优课在线（UOOC）学习平台。
 
 ## 功能
 
@@ -15,18 +15,34 @@ Tampermonkey / Violentmonkey / ScriptCat用户脚本，用于优课在线（UOOC
 
 ## 安装
 
-### 方式一：一键安装（推荐）
+### 第一步：安装一个用户脚本管理器
 
-1. 确保已安装 [Tampermonkey](https://www.tampermonkey.net/) 浏览器扩展并启用
-2. [点击安装脚本](https://raw.githubusercontent.com/Uooc-Nanashi/uooc-helper/main/uooc-helper.user.js)
-3. Tampermonkey 会弹出安装页，点「安装」即可
+任选其一即可，已装过其中任何一个可跳过：
 
-### 方式二：手动安装（一键安装失败时用）
+| 管理器 | 下载地址 |
+|---|---|
+| **Tampermonkey**（推荐） | [tampermonkey.net](https://www.tampermonkey.net/) |
+| **Violentmonkey** | [violentmonkey.github.io](https://violentmonkey.github.io/) |
+| **ScriptCat** | [scriptcat.org](https://scriptcat.org/) |
+
+各浏览器扩展商店里搜索名称也可安装
+
+### 第二步：安装脚本
+
+确保管理器已启用后，点击下面任一方式安装：
+
+**方式一：一键安装**
+
+[点击安装脚本](https://raw.githubusercontent.com/Uooc-Nanashi/uooc-helper/main/uooc-helper.user.js)
+
+管理器会弹出安装确认页，点「安装」或「确定」即可。
+
+**方式二：手动安装**（一键安装失败时用）
 
 1. 打开 [脚本源码](https://raw.githubusercontent.com/Uooc-Nanashi/uooc-helper/main/uooc-helper.user.js)
 2. 全选（Ctrl+A）复制
-3. 自行前往 Tampermonkey 等拓展的管理页添加新脚本
-4. 全选删掉模板，粘贴脚本
+3. 点管理器图标 → 「添加新脚本」/「新建脚本」
+4. 全选删掉默认模板，粘贴脚本
 5. Ctrl+S 保存
 
 ### 安装后
@@ -43,6 +59,21 @@ Tampermonkey / Violentmonkey / ScriptCat用户脚本，用于优课在线（UOOC
 ## 数据安全
 
 本脚本不收集任何个人信息，所有设置与缓存仅存储在本地浏览器 `localStorage`。
+
+## 常见问题
+
+**Q：一键安装后卡在「Script Installation」中间页？**
+
+这是管理器的安全机制。参考上面的「方式二：手动安装」即可绕过。
+
+**Q：装完没反应？**
+
+刷新 UOOC 页面；若仍无反应，检查浏览器右上角管理器图标是否为启用状态。
+
+**Q：脚本功能异常？**
+
+请在 [Issues](https://github.com/Uooc-Nanashi/uooc-helper/issues) 里反馈，完整说明问题，建议附上脚本日志或控制台的错误信息（请注意提交时**删除个人信息**）。
+
 
 ## 许可证
 

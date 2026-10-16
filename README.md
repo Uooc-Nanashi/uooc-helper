@@ -41,11 +41,11 @@ Tampermonkey / Violentmonkey / ScriptCat 用户脚本，用于优课在线（UOO
 
 **方式二：手动安装**（一键安装失败时用）
 
-1. 打开 [脚本源码](https://raw.githubusercontent.com/Uooc-Nanashi/uooc-helper/main/uooc-helper.user.js)
-2. 全选（Ctrl+A）复制
-3. 点管理器图标 → 「添加新脚本」/「新建脚本」
-4. 全选删掉默认模板，粘贴脚本
-5. Ctrl+S 保存
+1. 打开 [脚本源码](https://github.com/Uooc-Nanashi/uooc-helper/blob/main/uooc-helper.user.js)
+2. 全选`Ctrl+A`，复制 `Ctrl+C`
+3. 在拓展页里点击管理器图标 → 「添加新脚本」/「新建脚本」
+4. 全选删掉默认模板，粘贴`Ctrl+V` 脚本
+5. 保存`Ctrl+S` 
 
 ### 安装后
 
@@ -65,15 +65,15 @@ Tampermonkey / Violentmonkey / ScriptCat 用户脚本，用于优课在线（UOO
 
 ## 常见问题
 
-**Q：一键安装后卡在「Script Installation」中间页？**
+**Q：方式一：一键安装卡在「Script Installation」中间页？**
 
 中间页是 Tampermonkey 的正常中转页，它会把 raw 链接转发到安装对话框。卡住通常是以下原因：
 
 - **网络慢或超时**（常见）：`raw.githubusercontent.com` 在国内访问不稳定。请使用代理或者镜像站。
-- **安装来源限制**：Tampermonkey 设置 → 高级 → 安全 → 「允许脚本来源」，添加 `https://raw.githubusercontent.com/*` 后重试。
-- **弹窗被拦截**：检查地址栏右侧是否有被拦截的弹窗提示，允许后重试。
+- 安装来源限制：Tampermonkey 设置 → 高级 → 安全 → 「允许脚本来源」，添加 `https://raw.githubusercontent.com/*` 后重试。
+- 弹窗被拦截：检查地址栏右侧是否有被拦截的弹窗提示，允许后重试。
 
-若以上仍无效，改用「方式二：手动安装」即可（这是 Tampermonkey 支持的标准安装方式，与一键安装等效）。
+若以上仍无效，**改用「方式二：手动安装」即可**（这是 Tampermonkey 支持的标准安装方式，与一键安装等效）。
 
 **Q：装完没反应？**
 

@@ -3719,7 +3719,7 @@
         chLogWrap.append(chLogHead, chLog);
         pageChallenge.appendChild(chLogWrap);
 
-        /* 【v2.12.18】题目缓存/扫描缓存均以 JSON 格式输出 */
+        /* 【v0.12.18】题目缓存/扫描缓存均以 JSON 格式输出 */
         function formatCacheForDisplay(d) {
             if (!d) return "（当前课程暂无闯关缓存）";
             return JSON.stringify(d, null, 2);
@@ -3788,7 +3788,7 @@
         scanSubBody.style.cssText = "flex:1;overflow:auto;padding:0;";
         scanSubPage.append(scanSubHeader, scanSubBody);
 
-        /* 【v2.12.18】扫描缓存改为 JSON 输出 */
+        /* 【v0.12.18】扫描缓存改为 JSON 输出 */
         function formatScanCacheForDisplay() {
             const obj = {
                 version: STORAGE_VERSION_PREFIX,
@@ -3994,7 +3994,7 @@
             document.addEventListener("mousemove", e => _move(e.clientX, e.clientY));
             document.addEventListener("mouseup", _end);
 
-            /* 【v2.12.2】触屏拖动：仅移动版视图启用 */
+            /* 【v0.12.2】触屏拖动：仅移动版视图启用 */
             header.addEventListener("touchstart", e => {
                 if (!getSettings().mobileView) return;
                 if (e.target === btnFold) return;
@@ -4423,7 +4423,7 @@
             getQuizSubmitMode,
             refreshButtonStates,
             updateSubmitModeUI,
-            /* 【v2.12.20 修复】同时给智能答题按钮的 paintQuizButton 提供互斥判断 */
+            /* 【v0.12.20 修复】同时给智能答题按钮的 paintQuizButton 提供互斥判断 */
             _registerMutexCheck(fn) {
                 _externalMutexCheck = fn;
                 _anyMutexRunningCb = function () {
@@ -4466,7 +4466,6 @@ html, body { height: 100%; margin: 0; }
 body { font-family: -apple-system, "Segoe UI", "Microsoft YaHei", sans-serif; background: #0d1117; color: #e6e6e6; display: flex; flex-direction: column; overflow: hidden; }
 .header { flex: 0 0 auto; padding: 0 16px; height: 54px; background: linear-gradient(90deg, #0b3d3a, #052825); display: flex; align-items: center; gap: 20px; border-bottom: 1px solid #1e2a33; box-shadow: 0 2px 8px rgba(0,0,0,0.25); }
 .header h1 { margin: 0; font-size: 14px; letter-spacing: 1.5px; color: #cfd8dc; font-weight: 600; display: flex; align-items: center; gap: 10px; white-space: nowrap; }
-/* 标题前渐变竖条已移除 */
 .tabs { display: flex; gap: 4px; background: rgba(0,0,0,0.25); padding: 4px; border-radius: 8px; flex: 0 0 auto; }
 .tab { padding: 7px 22px; font-size: 13px; cursor: pointer; border-radius: 6px; color: #90a4ae; user-select: none; transition: background .2s, color .2s, box-shadow .2s; font-weight: 500; letter-spacing: .5px; }
 .tab:hover { background: rgba(255,255,255,0.06); color: #cfd8dc; }
@@ -4485,7 +4484,7 @@ body { font-family: -apple-system, "Segoe UI", "Microsoft YaHei", sans-serif; ba
 .toolbar button.sec:hover { background: #546e7a; }
 .toolbar button.warn { background: #6d4c41; }
 
-/* 代码渲染器：行号 + 缩进竖线 + 彩色 token（v2.12.18 修复缩进不生效） */
+/* 代码渲染器：行号 + 缩进竖线 + 彩色 token */
 .code-render { font-family: "JetBrains Mono", "Consolas", monospace; font-size: 12.5px; line-height: 1.7; background: #0d1117; border: 1px solid #21262d; border-radius: 6px; padding: 10px 0; overflow: auto; color: #c9d1d9; }
 .code-render .cl { position: relative; padding-left: calc(46px + var(--indent, 0) * 18px); padding-right: 16px; white-space: pre; min-height: 1.7em; }
 .code-render .cl:hover { background: rgba(255,255,255,0.03); }
@@ -5052,7 +5051,7 @@ body { font-family: -apple-system, "Segoe UI", "Microsoft YaHei", sans-serif; ba
     var _editMode = "code";
     var _draftMethod = null;
 
-    /* 【v2.12.24】预设模型系列注册表：新增预设只需在这里加一项 */
+    /* 【v0.12.24】预设模型系列注册表：新增预设只需在这里加一项 */
     var PRESETS = {
         deepseek: {
             name: "DeepSeek",
@@ -5233,7 +5232,7 @@ body { font-family: -apple-system, "Segoe UI", "Microsoft YaHei", sans-serif; ba
             input.value = value || "";
             if (toggle) toggle.style.display = "none";
         }
-        /* 【v2.12.21】切换预设 / 模式后立即刷新必填态，
+        /* 【v0.12.21】切换预设 / 模式后立即刷新必填态，
            避免 model 字段停留在旧的红色状态（required-invalid） */
         try { validateRequired(); } catch (err) {}
     }
@@ -5520,7 +5519,7 @@ body { font-family: -apple-system, "Segoe UI", "Microsoft YaHei", sans-serif; ba
         renderEditor();
     }
 
-    /* 【v2.12.24】保存按钮状态管理 */
+    /* 【v0.12.24】保存按钮状态管理 */
     var _savedSnapshot = null;
     function _currentSnapshot() {
         try {
@@ -6640,7 +6639,7 @@ textarea, pre, .report-body { flex: 1; background: #0d1117; color: #e6e6e6; bord
         { t: "h3", text: "5.2 字符替换风险表" },
         { t: "p", text: "下表列出在非纯文本通道中会被静默替换的常见字符，及其导致的后果。" },
         { t: "table", head: ["字符", "常见替换结果", "后果", "规避方式"], rows: [
-            ["直双引号", "弯双引号", "FIND 匹配失败；或 REPLACE 写入全角引号导致语法错误", "自 v2.12.21 起应用器会自动规范化，见 §5.9"],
+            ["直双引号", "弯双引号", "FIND 匹配失败；或 REPLACE 写入全角引号导致语法错误", "自 v0.12.21 起应用器会自动规范化，见 §5.9"],
             ["直单引号", "弯单引号", "同上", "同上"],
             ["反引号", "被作为 Markdown 代码标记剥除", "FIND 匹配失败；或 REPLACE 内容缺失", "避免在 FIND 中使用；或改用不含反引号的锚点"],
             ["反斜杠", "折叠为单个、或加倍为两个", "正则表达式或转义序列语义改变", "用字符类规避（例如以 [0-9] 代替数字匹配）"],
@@ -6671,7 +6670,7 @@ textarea, pre, .report-body { flex: 1; background: #0d1117; color: #e6e6e6; bord
         { t: "h3", text: "5.6 典型错误实例" },
         { t: "p", text: "以下实例均来自真实故障，每条列出描述、代码文本、正确做法。" },
         { t: "ol", list: [
-            "<strong>FIND 中的引号被替换</strong><br><strong>描述</strong>：从聊天窗口复制 FIND 时，源码里的 ASCII 双引号会被渲染层替换为弯引号，导致应用器找不到对应片段。<br><strong>代码文本</strong>：<code>text: &#34;实例集&#34;</code>（原文） → <code>text: &#8220;实例集&#8221;</code>（复制后）<br><strong>正确做法</strong>：从纯文本编辑器重新复制 FIND；或依赖应用器自 v2.12.21 起的自动还原。",
+            "<strong>FIND 中的引号被替换</strong><br><strong>描述</strong>：从聊天窗口复制 FIND 时，源码里的 ASCII 双引号会被渲染层替换为弯引号，导致应用器找不到对应片段。<br><strong>代码文本</strong>：<code>text: &#34;实例集&#34;</code>（原文） → <code>text: &#8220;实例集&#8221;</code>（复制后）<br><strong>正确做法</strong>：从纯文本编辑器重新复制 FIND；或依赖应用器自 v0.12.21 起的自动还原。",
             "<strong>REPLACE 中引入裸双引号</strong><br><strong>描述</strong>：HTML 内容里直接嵌入 ASCII 双引号，会提前终止该字符串，使内嵌 script 的解析失败。<br><strong>代码文本</strong>：<code>body: &#34;…type: &#34;disabled&#34;…&#34;</code>（内层双引号提前闭合外层字符串）<br><strong>正确做法</strong>：内层双引号改用 HTML 实体 <code>&amp;quot;</code> 表达（浏览器渲染时还原为双引号）。",
             "<strong>模板字面量中的裸换行</strong><br><strong>描述</strong>：模板字面量里的换行转义会被解释为真换行，落到内嵌 script 的字符串字面量内部，引发 SyntaxError。<br><strong>代码文本</strong>：<code>arr.join(&#34;&#92;n&#34;)</code><br><strong>正确做法</strong>：改用 <code>arr.join(String.fromCharCode(10))</code>。",
             "<strong>模板字面量吞掉反斜杠</strong><br><strong>描述</strong>：模板字面量里的单反斜杠会与其后的字符组成转义序列，导致正则元字符（如空白符、数字匹配符）退化为字面量匹配。<br><strong>代码文本</strong>：<code>match(/^([0-9]+)[.]&#92;s/)</code><br><strong>正确做法</strong>：在模板字面量里对该反斜杠写两次：<code>match(/^([0-9]+)[.]&#92;&#92;s/)</code>。",
@@ -6679,7 +6678,7 @@ textarea, pre, .report-body { flex: 1; background: #0d1117; color: #e6e6e6; bord
             "<strong>HTML 属性中的反斜杠转义被吞掉</strong><br><strong>描述</strong>：向外层模板字面量生成的内嵌 &lt;script&gt; 里写入形如 &lt;b style=&#92;&quot;color:#ef5350;&#92;&quot;&gt; 的 HTML 片段时，双反斜杠转义序列会被外层模板字面量解释成单个双引号，导致内嵌字符串被提前闭合，抛出 SyntaxError: Unexpected identifier。<br><strong>代码文本</strong>：<code>body: &#34;…&lt;b style=&#92;&#34;color:#ef5350;&#92;&#34;&gt;…&#34;</code>（内层双引号破坏外层字符串）<br><strong>正确做法</strong>：HTML 属性改用单引号包裹，避免在字符串里出现裸双引号：<code>body: &#34;…&lt;b style=&#39;color:#ef5350;&#39;&gt;…&#34;</code>。"
         ]},
         { t: "h3", text: "5.7 应用器的语法校验" },
-        { t: "p", text: "自脚本 v2.12.21 起，应用器在输出新代码前调用 JavaScript 解析器对结果做一次语法校验，拦截「改动本身合法、但生成的代码无法被 JS 解析」的情况。" },
+        { t: "p", text: "自脚本 v0.12.21 起，应用器在输出新代码前调用 JavaScript 解析器对结果做一次语法校验，拦截「改动本身合法、但生成的代码无法被 JS 解析」的情况。" },
         { t: "ul", list: [
             "校验方式：对「新代码」整体调用 <code>new Function(code)</code>，仅编译不执行，无副作用。",
             "通过：右上角报告徽章变绿，可以复制回脚本。",
@@ -6692,7 +6691,7 @@ textarea, pre, .report-body { flex: 1; background: #0d1117; color: #e6e6e6; bord
             "看到「通过」只代表代码能被 JavaScript 解析，不代表代码按预期运行。"
         ]},
         { t: "h3", text: "5.9 智能标点自动规范化" },
-        { t: "p", text: "自脚本 v2.12.21 起，应用器在解析改动点时自动执行智能标点规范化：将弯引号、全角引号统一还原为 ASCII 直引号，避免因复制来源导致的引号变形。" },
+        { t: "p", text: "自脚本 v0.12.21 起，应用器在解析改动点时自动执行智能标点规范化：将弯引号、全角引号统一还原为 ASCII 直引号，避免因复制来源导致的引号变形。" },
         { t: "table", head: ["原始字符", "Unicode 码位", "规范化为"], rows: [
             ["左右双弯引号", "U+201C / U+201D", "直双引号"],
             ["双低位引号", "U+201E / U+201F", "直双引号"],
@@ -6873,7 +6872,7 @@ textarea, pre, .report-body { flex: 1; background: #0d1117; color: #e6e6e6; bord
     let stopRequested = false;
     let scanCancelFlag = false;
 
-    /* 【v2.12.21】本次递归已成功处理（playTaskpoint / processNonVideoTaskpoint 返回 true）
+    /* 【v0.12.21】本次递归已成功处理（playTaskpoint / processNonVideoTaskpoint 返回 true）
        的任务点集合。使用 name|path 作为键，兼容 scanItems 中出现的同名项
        （重复扫描或缓存与 DOM 不一致可能导致）。
        作用：
@@ -6886,7 +6885,7 @@ textarea, pre, .report-body { flex: 1; background: #0d1117; color: #e6e6e6; bord
         var nm = it.name || "";
         var p = "";
         try { p = Array.isArray(it.path) ? it.path.join("/") : ""; } catch (e) {}
-        /* 【v2.12.21 修复】同一小节内的视频/测验 name 与 path 可能完全相同
+        /* 【v0.12.21 修复】同一小节内的视频/测验 name 与 path 可能完全相同
            （name 被 GENERIC_NAME_WORDS 退化为小节名），必须再区分 type、_ri、isVideo，
            否则视频处理完后会把同小节的测验误判为"已处理"而跳过。 */
         var ri = (typeof it._ri === "number") ? it._ri : -1;

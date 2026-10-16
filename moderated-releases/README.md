@@ -1,4 +1,4 @@
-# UOOC 学习助手（优课联盟 / 优课在线）
+# UOOC 优课学习助手（优课联盟 / 优课在线）
 
 [![快速安装](https://img.shields.io/badge/%E5%AE%89%E8%A3%85-uooc--helper.user.js-green)](https://raw.githubusercontent.com/Uooc-Nanashi/uooc-helper/main/uooc-helper.user.js)
 

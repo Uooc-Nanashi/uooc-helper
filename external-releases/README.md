@@ -45,7 +45,7 @@ Tampermonkey / Violentmonkey / ScriptCat 用户脚本，用于优课在线（UOO
 
 1. 打开 [脚本源码](https://github.com/Uooc-Nanashi/uooc-helper/blob/main/uooc-helper.user.js)
 2. 全选 `Ctrl+A`，复制 `Ctrl+C`
-3. 在拓展页里点击管理器图标 → 「添加新脚本」/「新建脚本」
+3. 在拓展页里点击管理器图标 → 添加新脚本/新建脚本
 4. 全选删掉默认模板，粘贴 `Ctrl+V` 脚本
 5. 保存 `Ctrl+S`
 

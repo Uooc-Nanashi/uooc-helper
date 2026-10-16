@@ -38,7 +38,7 @@ Tampermonkey / Violentmonkey / ScriptCat 用户脚本，用于优课在线（UOO
 
 [点击安装脚本](https://raw.githubusercontent.com/Uooc-Nanashi/uooc-helper/main/uooc-helper.user.js)
 
-管理器会弹出安装确认页，点「安装」或「确定」即可。
+管理器会在等待片刻后弹出安装确认页，点击「安装」或「确定」即可。
 
 **方式二：手动安装**（推荐，一键安装失败时使用）
 
@@ -66,23 +66,23 @@ Tampermonkey / Violentmonkey / ScriptCat 用户脚本，用于优课在线（UOO
 
 ## 常见问题
 
-**Q：方式一：一键安装卡在「Script Installation」中间页？**
+**Q：`方式一：一键安装`卡在「Script Installation」中间页？**
 
 中间页是 Tampermonkey 的正常中转页，它会把 raw 链接转发到安装对话框。卡住通常是以下原因：
 
-- **网络慢或超时**（常见）：`raw.githubusercontent.com` 在国内访问不稳定。请使用代理或者镜像站。
-- 安装来源限制：Tampermonkey 设置 → 高级 → 安全 → 「允许脚本来源」，添加 `https://raw.githubusercontent.com/*` 后重试。
-- 弹窗被拦截：检查地址栏右侧是否有被拦截的弹窗提示，允许后重试。
+* **网络慢或超时**（常见）：`raw.githubusercontent.com` 在国内访问不稳定。请使用代理或者镜像站。
+* 安装来源限制：Tampermonkey 设置 → 高级 → 安全 → 「允许脚本来源」，添加 `https://raw.githubusercontent.com/*` 后重试。
+* 弹窗被拦截：检查地址栏右侧是否有被拦截的弹窗提示，允许后重试。
 
 若以上仍无效，**改用「方式二：手动安装」即可**（这是 Tampermonkey 支持的标准安装方式，与一键安装等效）。
 
 **Q：装完没反应？**
 
-刷新 UOOC 页面；若仍无反应，检查浏览器右上角管理器图标是否为启用状态。
+进入 UOOC 网页版，刷新 UOOC 页面；若仍无反应，请检查浏览器右上角管理器图标是否为启用状态，并检查脚本设置页中是否排除了脚本头 `@match` 里需要的域名。
 
 **Q：脚本功能异常？**
 
-请在 [Issues](https://github.com/Uooc-Nanashi/uooc-helper/issues) 里反馈，完整说明问题，建议附上脚本日志或控制台的错误信息（提交时请注意**删除个人信息**)。
+请在 [本项目的 Github Issues ](https://github.com/Uooc-Nanashi/uooc-helper/issues) 里反馈，完整说明问题，建议附上脚本日志或控制台的错误信息（提交时请注意**删除个人信息**) 。
 
 
 ## 许可证

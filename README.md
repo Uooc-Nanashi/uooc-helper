@@ -1,6 +1,6 @@
 # UOOC 学习助手（优课联盟 / 优课在线）
 
-[![安装脚本](https://img.shields.io/badge/安装-uooc--helper.user.js-green)](https://raw.githubusercontent.com/Uooc-Nanashi/uooc-helper/main/uooc-helper.user.js)
+[![从 GitHub Raw 获取](https://img.shields.io/badge/安装-uooc--helper.user.js-green)](https://raw.githubusercontent.com/Uooc-Nanashi/uooc-helper/main/uooc-helper.user.js)
 
 Tampermonkey / Violentmonkey / ScriptCat 用户脚本，用于优课在线（UOOC）学习平台。
 

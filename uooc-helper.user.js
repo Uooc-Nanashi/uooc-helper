@@ -6164,7 +6164,8 @@ body { font-family: -apple-system, "Segoe UI", "Microsoft YaHei", sans-serif; ba
         { t: "h3", text: "6.1 当前 @match 列表" },
         { t: "code", text: '// @match        *://www.uooc.net.cn/*\\n// @match        *://uooc.net.cn/*\\n// @match        *://*.uooc.net.cn/*\\n// @match        *://uooc.online/*\\n// @match        *://*.uooc.online/*\\n// @match        *://chat.deepseek.com/*' },
         { t: "h3", text: "6.2 如何添加" },
-        { t: "p", text: "在脚本头部（即 <code>// ==UserScript==</code> 与 <code>// ==/UserScript==</code> 之间的部分）追加一行：<br><code>// @match        *://【AI网站域名】/*</code>。" },
+        { t: "p", text: "在脚本头部（即 <code>// ==UserScript==</code> 与 <code>// ==/UserScript==</code> 之间的部分）追加一行：<code>// @match        *://【AI 网站域名】/*</code>" },
+        { t: "p", text: "下面是常见 AI 网页端的建议 @match" },
         { t: "table", head: ["服务", "建议 @match"], rows: [
             ["ChatGPT", "<code>*://chat.openai.com/*</code>、<code>*://chatgpt.com/*</code>"],
             ["Claude", "<code>*://claude.ai/*</code>"],

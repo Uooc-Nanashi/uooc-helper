@@ -6168,11 +6168,10 @@ body { font-family: -apple-system, "Segoe UI", "Microsoft YaHei", sans-serif; ba
             "// ==UserScript==",
             "// @name         UOOC 学习助手",
             "// @namespace    https://github.com/Uooc-Nanashi/uooc-helper",
-            "// @version      1.0.1",
+            "// @version      1.0.1.e",
             "// @description  UOOC 刷课脚本（专门适配优课联盟 / 优课在线 ）| 提供无需API的完全免费方案 · 开源 · 非商业 | 全自动完成课程 · 视频自动播放 · 智能完成测验（大模型网页版 + API 双方案）· 内置功能修复与扩展工具",
-            "// @tag          uooc uooconline auto-answer mooc 优课在线 优课联盟",
+            "// @tag          uooc auto-script 优课在线",
             "// @author       Uooc-Nanashi",
-            "// @license      GPL-3.0-or-later",
             "// @homepageURL  https://github.com/Uooc-Nanashi/uooc-helper",
             "// @supportURL   https://github.com/Uooc-Nanashi/uooc-helper/issues",
             "// @match        *://www.uooc.net.cn/*",
@@ -6185,6 +6184,7 @@ body { font-family: -apple-system, "Segoe UI", "Microsoft YaHei", sans-serif; ba
             "// @match        *://doubao.com/*",
             "// @match        *://*.doubao.com/*",
             "// @grant        none",
+            "// @license      GPL-3.0-or-later",
             "// ==/UserScript=="
         ].join(String.fromCharCode(10)) },
         { t: "table", head: ["服务", "建议 @match"], rows: [

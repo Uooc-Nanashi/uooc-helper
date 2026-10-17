@@ -6,7 +6,6 @@
 // @author       Uooc-Nanashi
 // @downloadURL  https://raw.githubusercontent.com/Uooc-Nanashi/uooc-helper/main/uooc-helper.user.js
 // @updateURL    https://raw.githubusercontent.com/Uooc-Nanashi/uooc-helper/main/uooc-helper.user.js
-// @license      GPL-3.0-or-later
 // @homepageURL  https://github.com/Uooc-Nanashi/uooc-helper
 // @supportURL   https://github.com/Uooc-Nanashi/uooc-helper/issues
 // @match        *://www.uooc.net.cn/*
@@ -6175,7 +6174,6 @@ body { font-family: -apple-system, "Segoe UI", "Microsoft YaHei", sans-serif; ba
             "// @author       Uooc-Nanashi",
             "// @downloadURL  https://raw.githubusercontent.com/Uooc-Nanashi/uooc-helper/main/uooc-helper.user.js",
             "// @updateURL    https://raw.githubusercontent.com/Uooc-Nanashi/uooc-helper/main/uooc-helper.user.js",
-            "// @license      GPL-3.0-or-later",
             "// @homepageURL  https://github.com/Uooc-Nanashi/uooc-helper",
             "// @supportURL   https://github.com/Uooc-Nanashi/uooc-helper/issues",
             "// @match        *://www.uooc.net.cn/*",

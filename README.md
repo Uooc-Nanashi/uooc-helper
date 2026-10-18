@@ -87,4 +87,4 @@ Tampermonkey / Violentmonkey / ScriptCat 用户脚本，用于优课在线（UOO
 
 ## 许可证
 
-[GPL-3.0-or-later](LICENSE)
+[GPL-3.0-or-later](https://www.gnu.org/licenses/gpl-3.0.html#license-text)

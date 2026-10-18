@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         UOOC 学习助手
 // @namespace    https://github.com/Uooc-Nanashi/uooc-helper
-// @version      1.0.1
+// @version      1.0.2
 // @description  UOOC 刷课脚本（专门适配优课联盟 / 优课在线 ）| 提供无需API的完全免费方案 · 开源 · 非商业 | 全自动完成课程 · 视频自动播放 · 智能完成测验（大模型网页版 + API 双方案）· 内置功能修复与扩展工具
 // @author       Uooc-Nanashi
 // @downloadURL  https://raw.githubusercontent.com/Uooc-Nanashi/uooc-helper/main/uooc-helper.user.js
@@ -2880,10 +2880,6 @@
             <span id="uooc-resource-text" style="width:80px;text-align:right;flex:0 0 auto;">0 / 0</span>
         `;
 
-        const challengeCfgLine = document.createElement("div");
-        challengeCfgLine.id = "uooc-challenge-cfg";
-        challengeCfgLine.style.cssText = "display:none;margin-top:2px;color:#ffa726;font-size:var(--uooc-fs-sm);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;";
-
         const challengeWarningLine = document.createElement("div");
         challengeWarningLine.id = "uooc-challenge-warn";
         challengeWarningLine.style.cssText = "display:none;margin-top:2px;color:#ef5350;font-size:var(--uooc-fs-sm);line-height:1.5;word-break:break-all;";
@@ -2899,7 +2895,7 @@
         autoScanTag.style.cssText = "display:none;background:#ffa726;color:#000;border-radius:3px;padding:1px 6px;font-size:10px;font-weight:bold;flex:0 0 auto;";
 
         statusLine.append(statusText, autoScanTag);
-        progressBox.append(chapterLine, chapterErrorLine, resourceLine, challengeCfgLine, challengeWarningLine, statusLine);
+        progressBox.append(chapterLine, chapterErrorLine, resourceLine, challengeWarningLine, statusLine);
         panel.appendChild(progressBox);
 
         const bodyWrap = document.createElement("div");
@@ -3341,8 +3337,8 @@
 
         const chSubmitSelect = document.createElement("select");
         chSubmitSelect.innerHTML = `
-            <option value="manual">手动提交（递归仅处理视频，测验需自行提交）</option>
-            <option value="auto">自动提交（递归会一并处理测验并自动提交）</option>
+            <option value="manual">手动提交</option>
+            <option value="auto">自动提交</option>
         `;
         chSubmitSelect.addEventListener("change", () => {
             const mode = chSubmitSelect.value === "auto" ? "auto" : "manual";
@@ -3545,7 +3541,7 @@
                 mkAiMethodSelectRow(),
                 btnManageMethods,
                 toggleChallengeAlways.wrap,
-                mkSettingSelect("提交方式", "选择测验提交方式。手动提交时，递归只处理视频任务点，测验需要自行提交；自动提交时，递归操作将包括测验任务点（自动填写并提交），同时模拟人工完成智能验证。", chSubmitSelect),
+                mkSettingSelect("提交方式", "选择测验提交方式。手动提交：测验需要自行提交，递归只处理视频任务点。自动提交：将模拟人类完成智能验证提交测验，递归处理对象将包括测验任务点", chSubmitSelect),
             ]),
             setBtnRow
         );
@@ -4227,13 +4223,6 @@
             if (showChallenge) tabChallenge.style.display = "block";
             else { tabChallenge.style.display = "none"; if (currentTabKey === "challenge") switchTab("tasks"); }
 
-            if (_challengeMode) {
-                challengeCfgLine.style.display = "block";
-                challengeCfgLine.textContent = `智能闯关模式配置：[${_challengeCfg}]`;
-            } else {
-                challengeCfgLine.style.display = "none";
-            }
-
             updateAutoScanVisibility();
 
             const changes = [];
@@ -4366,7 +4355,7 @@
             setAllVideosDone(v) { _allVideosDone = !!v; refreshButtonStates(); },
             setUnrestrictedVideosDone(v) { _unrestrictedVideosDone = !!v; refreshButtonStates(); },
             setChallengeMode(v) { _challengeMode = !!v; refreshButtonStates(); },
-            setChallengeCfg(t) { _challengeCfg = t; refreshButtonStates(); },
+            setChallengeCfg(t) { _challengeCfg = t; },
             setAutoScanning,
             setAutoScanEnabled,
             setCacheBtnCleared,
@@ -6164,7 +6153,7 @@ body { font-family: -apple-system, "Segoe UI", "Microsoft YaHei", sans-serif; ba
         { t: "h3", text: "6.1 当前 @match 列表" },
         { t: "code", text: '// @match        *://www.uooc.net.cn/*\\n// @match        *://uooc.net.cn/*\\n// @match        *://*.uooc.net.cn/*\\n// @match        *://uooc.online/*\\n// @match        *://*.uooc.online/*\\n// @match        *://chat.deepseek.com/*' },
         { t: "h3", text: "6.2 如何添加" },
-        { t: "p", text: "在脚本头部（即 <code>// ==UserScript==</code> 与 <code>// ==/UserScript==</code> 之间的部分）追加一行：<code>// @match        *://【AI 网站域名】/*</code>" },
+        { t: "p", text: "在脚本头（即 <code>// ==UserScript==</code> 与 <code>// ==/UserScript==</code> 之间的部分）追加一行：<code>// @match        *://【AI 网站域名】/*</code>" },
         { t: "p", text: "下面是常见 AI 网页端的建议 @match" },
         { t: "table", head: ["服务", "建议 @match"], rows: [
             ["ChatGPT", "<code>*://chat.openai.com/*</code>、<code>*://chatgpt.com/*</code>"],
@@ -8843,7 +8832,7 @@ textarea, pre, .report-body { flex: 1; background: #0d1117; color: #e6e6e6; bord
      * 【启动】
      * ============================================================ */
     function init() {
-        UI.log("脚本已加载 v1.0.1", "ok");
+        UI.log("脚本已加载 v1.0.2", "ok");
 
         applyMobileView(getSettings().mobileView);
         applyForceAspect(getSettings().forceAspect);

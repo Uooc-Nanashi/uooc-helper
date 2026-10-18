@@ -70,7 +70,7 @@ Tampermonkey / Violentmonkey / ScriptCat 用户脚本，用于优课在线（UOO
 
 中间页是 Tampermonkey 的正常中转页，它会把 raw 链接转发到安装对话框。卡住通常是以下原因：
 
-* **网络慢或超时**（常见）：`raw.githubusercontent.com` 在国内访问不稳定。请使用代理或者镜像站。
+* **网络慢或超时**（常见）：`raw.githubusercontent.com` 在国内访问不稳定。你可以前往[国内脚本库](https://scriptcat.org/zh-CN/script-show-page/8524)下载，也可以使用代理或者镜像站。
 * 安装来源限制：Tampermonkey 设置 → 高级 → 安全 → 「允许脚本来源」，添加 `https://raw.githubusercontent.com/*` 后重试。
 * 弹窗被拦截：检查地址栏右侧是否有被拦截的弹窗提示，允许后重试。
 

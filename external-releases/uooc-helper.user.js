@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         UOOC 学习助手
 // @namespace    https://github.com/Uooc-Nanashi/uooc-helper
-// @version      1.0.2.e
+// @version      1.0.3.e
 // @description  UOOC 刷课脚本（专门适配优课联盟 / 优课在线 ）| 提供无需API的完全免费方案 · 开源 · 非商业 | 全自动完成课程 · 视频自动播放 · 智能完成测验（大模型网页版 + API 双方案）· 内置功能修复与扩展工具
 // @tag          uooc auto-script 优课在线
 // @author       Uooc-Nanashi
@@ -6891,6 +6891,7 @@ textarea, pre, .report-body { flex: 1; background: #0d1117; color: #e6e6e6; bord
     let autoScanEnabled = true;
     let autoScanInProgress = false;
     let _lastChallengeKey = null;
+    let _recursiveSessionActive = false;
 
     let recordQuizRunning = false;
 
@@ -7778,6 +7779,12 @@ textarea, pre, .report-body { flex: 1; background: #0d1117; color: #e6e6e6; bord
         scanning = false;
         UI.setScanning(false);
 
+        if (challengeDetected) {
+            UI.setStatus(autoStart ? "扫描结束（遇闯关拦截），即将自动递归…" : "扫描结束（遇闯关拦截），等待手动开始递归");
+        } else {
+            UI.setStatus("扫描完成");
+        }
+
         saveScanCache();
 
         if (challengeDetected && !running && autoStart) {
@@ -7950,7 +7957,7 @@ textarea, pre, .report-body { flex: 1; background: #0d1117; color: #e6e6e6; bord
         challengeMode = false;
         UI.setChallengeMode(false);
         challengeBlockPoint = null;
-        await scanCourse(_savedCi, _savedSi, false);
+        await scanCourse(_savedCi, _savedSi, _recursiveSessionActive);
     }
 
     /* ============================================================
@@ -8656,6 +8663,7 @@ textarea, pre, .report-body { flex: 1; background: #0d1117; color: #e6e6e6; bord
     UI.onStart(async () => {
         if (running) {
             stopRequested = true;
+            _recursiveSessionActive = false;
             const video = getVideoEl();
             if (video && !video.paused) { try { video.pause(); } catch (e) {} }
             UI.log("⏸ 用户请求暂停", "warn");
@@ -8667,6 +8675,7 @@ textarea, pre, .report-body { flex: 1; background: #0d1117; color: #e6e6e6; bord
         if (UI.isQuizButtonRunning && UI.isQuizButtonRunning()) { UI.log("智能答题进行中，请稍候…", "warn"); return; }
 
         _lastChallengeKey = null;
+        _recursiveSessionActive = true;
 
         if (!scanItems.length) {
             UI.log("当前扫描结果为空，将先进行扫描…", "info");
@@ -8704,6 +8713,7 @@ textarea, pre, .report-body { flex: 1; background: #0d1117; color: #e6e6e6; bord
         _cacheRestored = false;
         _lastSavedHash = null;
         _lastChallengeKey = null;
+        _recursiveSessionActive = false;
         UI.setAutoScanEnabled(true);
         UI.setStatus("重新扫描中…");
         UI.resetQuizButton();
@@ -8831,7 +8841,7 @@ textarea, pre, .report-body { flex: 1; background: #0d1117; color: #e6e6e6; bord
      * 【启动】
      * ============================================================ */
     function init() {
-        UI.log("脚本已加载 v1.0.2.e", "ok");
+        UI.log("脚本已加载 v1.0.3.e", "ok");
 
         applyMobileView(getSettings().mobileView);
         applyForceAspect(getSettings().forceAspect);

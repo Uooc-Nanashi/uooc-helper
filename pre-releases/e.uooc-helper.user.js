@@ -8285,12 +8285,12 @@ textarea, pre, .report-body { flex: 1; background: #0d1117; color: #e6e6e6; bord
                         return li;
                     }
                     if (sectionTitle) {
-                        const hasRes = li.querySelector(":scope > .resourcelist");
-                        if (!hasRes) {
+                        let newSubUl = li.querySelector(":scope > ul");
+                        if (!newSubUl || newSubUl.children.length === 0) {
                             try { sectionTitle.click(); } catch (e) {}
                             await sleep(600);
+                            newSubUl = li.querySelector(":scope > ul");
                         }
-                        const newSubUl = li.querySelector(":scope > ul");
                         if (newSubUl) {
                             const found = await searchUl(newSubUl);
                             if (found) return found;

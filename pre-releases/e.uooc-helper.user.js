@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         UOOC 学习助手
 // @namespace    https://github.com/Uooc-Nanashi/uooc-helper
-// @version      1.0.4.e
+// @version      1.0.4.e-beta.1
 // @description  UOOC 刷课脚本（专门适配优课联盟 / 优课在线 ）| 提供无需API的完全免费方案 · 开源 · 非商业 | 全自动完成课程 · 视频自动播放 · 智能完成测验（大模型网页版 + API 双方案）· 内置功能修复与扩展工具
 // @tag          uooc auto-script 优课在线
 // @author       Uooc-Nanashi
@@ -2777,6 +2777,7 @@
         let _quizFillAnswerRunning = false;
         let _quizCompletedOnce = false;
         let _quizCompletedResetTimer = null;
+        let _uiAsRunning = false;
         /* 递归当前是否正在处理测验任务点。
            用于在递归运行中（自动提交开启）时让智能答题按钮先显示"等待递归进程…"，
            到测验任务点后切回正常显示并同步测验完成进度。 */
@@ -4203,7 +4204,9 @@
         optB.wrap.onclick = () => selectOption("B");
 
         function paintAutoScanButton() {
-            if (_autoScanEnabled) {
+            // 视觉开启条件：配置为启用 + 定时器运行中（_uiAsRunning 由主脚本推送）。
+            // 未运行时落到下方 else 灰态，避免"看起来在工作实际没启动"的误导。
+            if (_autoScanEnabled && _uiAsRunning) {
                 autoScanWrap.style.background = C.interactiveBgOn;
                 autoScanWrap.style.borderColor = C.interactiveBd;
                 autoScanWrap.style.color = C.interactiveFg;
@@ -4325,7 +4328,8 @@
         btnQuizRecord.onclick = () => { if (cbQuizRecord) cbQuizRecord(); };
 
         autoScanWrap.onclick = () => {
-            _autoScanEnabled = !_autoScanEnabled;
+            // 视觉绿（配置开 + 运行中）点击关闭；视觉灰（其他）点击启用
+            _autoScanEnabled = !(_autoScanEnabled && _uiAsRunning);
             paintAutoScanButton();
             if (cbAutoScanToggle) cbAutoScanToggle(_autoScanEnabled);
         };
@@ -4493,6 +4497,10 @@
                         return !!(st && st.any);
                     } catch (e) { return false; }
                 };
+            },
+            setAutoScanRunning(v) {
+                _uiAsRunning = !!v;
+                try { paintAutoScanButton(); } catch (e) {}
             }
         };
     })();
@@ -7943,9 +7951,13 @@ textarea, pre, .report-body { flex: 1; background: #0d1117; color: #e6e6e6; bord
             if (running || scanning) return;
             await autoScanBeforeMarker();
         }, intervalMs);
+        // 启动后推送状态：视觉从"未启动"切到"已启动"
+        try { UI.setAutoScanRunning(true); } catch (e) {}
     }
     function stopAutoScanLoop() {
         if (autoScanTimer) { clearInterval(autoScanTimer); autoScanTimer = null; }
+        // 停止后推送状态：视觉从"已启动"切到"未启动"
+        try { UI.setAutoScanRunning(false); } catch (e) {}
     }
 
     async function autoScanBeforeMarker() {
@@ -8035,6 +8047,17 @@ textarea, pre, .report-body { flex: 1; background: #0d1117; color: #e6e6e6; bord
                             const sectionLi = found.sectionLi;
                             const sectionTitle = sectionLi.querySelector(":scope > .basic");
                             
+                            // 若目标 point 未展开，先点击标题触发 ng-if，等 resourcelist 渲染后再读
+                            if (!sectionLi.querySelector(":scope > .resourcelist") && sectionTitle) {
+                                try { sectionTitle.click(); } catch (e) {}
+                                const _expandDl = Date.now() + 4000;
+                                while (Date.now() < _expandDl) {
+                                    await sleep(200);
+                                    if (sectionLi.querySelector(":scope > .resourcelist")) break;
+                                    if (detectChallengeBlock(sectionLi)) break;
+                                }
+                            }
+
                             // 获取资源列表
                             const rl = sectionLi.querySelector(":scope > .resourcelist");
                             const resources = rl ? Array.from(rl.querySelectorAll(":scope > .basic")) : [];
@@ -8268,6 +8291,66 @@ textarea, pre, .report-body { flex: 1; background: #0d1117; color: #e6e6e6; bord
         if (!root || !path || path.length < 2) return null;
         const chapterLIs = Array.from(root.children).filter(el => el.classList.contains("catalogItem"));
         const chapterName = path[0], sectionName = path[1];
+
+        // 编号快路径：从 path[1] 的编号前缀直接定位，失败则回退原线性搜索
+        const _extractNum = (name) => {
+            const m = String(name || "").match(/^(\d+(?:[.]\d+)*)\s+/);
+            return m ? m[1] : "";
+        };
+        const _findLiByNum = (ul, num) => {
+            if (!ul || !num) return null;
+            for (const li of Array.from(ul.children)) {
+                const t = li.querySelector(":scope > .basic");
+                if (t && _extractNum(chapterNameOf(t)) === num) return li;
+            }
+            return null;
+        };
+        try {
+            const targetNum = _extractNum(sectionName);
+            const parts = targetNum ? targetNum.split(".") : [];
+            if (parts.length === 2 || parts.length === 3) {
+                const chapterNum = parts[0];
+                let chapterLi = null;
+                for (const li of chapterLIs) {
+                    const t = li.querySelector(":scope > .basic.chapter") || li.querySelector(":scope > .basic");
+                    if (t && _extractNum(chapterNameOf(t)) === chapterNum) { chapterLi = li; break; }
+                }
+                if (chapterLi) {
+                    const chapterTitle = chapterLi.querySelector(":scope > .basic.chapter") || chapterLi.querySelector(":scope > .basic");
+                    const ci = chapterLIs.indexOf(chapterLi);
+                    if ((await activateChapter(chapterLi, chapterTitle)).activated) {
+                        const ul2 = chapterLi.querySelector(":scope > ul.rank-2");
+                        if (ul2) {
+                            if (parts.length === 2) {
+                                const targetLi = _findLiByNum(ul2, targetNum);
+                                if (targetLi) return { ci, si: -1, sectionLi: targetLi };
+                            } else {
+                                const parentNum = parts.slice(0, 2).join(".");
+                                const parentLi = _findLiByNum(ul2, parentNum);
+                                if (parentLi) {
+                                    const parentTitle = parentLi.querySelector(":scope > .basic");
+                                    if (!parentLi.querySelector(":scope > ul") && parentTitle) {
+                                        try { parentTitle.click(); } catch (e) {}
+                                        const _dl = Date.now() + 4000;
+                                        while (Date.now() < _dl) {
+                                            await sleep(200);
+                                            if (parentLi.querySelector(":scope > ul")) break;
+                                            if (detectChallengeBlock(parentLi)) break;
+                                        }
+                                    }
+                                    const rank3 = parentLi.querySelector(":scope > ul");
+                                    if (rank3) {
+                                        const targetLi = _findLiByNum(rank3, targetNum);
+                                        if (targetLi) return { ci, si: -1, sectionLi: targetLi };
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        } catch (e) {}
+        // 慢路径兜底（原线性搜索）
         for (let ci = 0; ci < chapterLIs.length; ci++) {
             const chapterLi = chapterLIs[ci];
             const chapterTitle = chapterLi.querySelector(":scope > .basic.chapter") || chapterLi.querySelector(":scope > .basic");
@@ -8285,12 +8368,12 @@ textarea, pre, .report-body { flex: 1; background: #0d1117; color: #e6e6e6; bord
                         return li;
                     }
                     if (sectionTitle) {
-                        let newSubUl = li.querySelector(":scope > ul");
-                        if (!newSubUl || newSubUl.children.length === 0) {
+                        const hasRes = li.querySelector(":scope > .resourcelist");
+                        if (!hasRes) {
                             try { sectionTitle.click(); } catch (e) {}
                             await sleep(600);
-                            newSubUl = li.querySelector(":scope > ul");
                         }
+                        const newSubUl = li.querySelector(":scope > ul");
                         if (newSubUl) {
                             const found = await searchUl(newSubUl);
                             if (found) return found;
@@ -9013,7 +9096,7 @@ textarea, pre, .report-body { flex: 1; background: #0d1117; color: #e6e6e6; bord
      * 【启动】
      * ============================================================ */
     function init() {
-        UI.log("脚本已加载 v1.0.4.e", "ok");
+        UI.log("脚本已加载 v1.0.4.e-beta.1", "ok");
 
         applyMobileView(getSettings().mobileView);
         applyForceAspect(getSettings().forceAspect);

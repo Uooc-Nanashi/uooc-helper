@@ -3667,7 +3667,7 @@
             }
             setTimeout(() => { btnCopyQuizSub.textContent = "复制"; btnCopyQuizSub.style.background = COPY_BG_DEFAULT; }, 3000);
         };
-        subHeaderRight.append(btnCopyQuizSub, btnCacheClearInSub, btnSubClose);
+        subHeaderRight.append(btnCacheClearInSub, btnCopyQuizSub, btnSubClose);
         subHeader.appendChild(subHeaderRight);
 
         const subBody = document.createElement("div");
@@ -3828,8 +3828,16 @@
 
         const btnScanClearInSub = document.createElement("button");
         btnScanClearInSub.textContent = "🗑 缓存";
-        btnScanClearInSub.style.cssText = "background:" + C.clearBtnBg + ";color:#fff;border:none;border-radius:4px;padding:5px 14px;cursor:pointer;font-size:var(--uooc-fs-sm);font-family:inherit;transition:background .15s;";
+        btnScanClearInSub.style.cssText = "background:" + C.clearBtnBg + ";color:#fff;border:none;border-radius:4px;padding:5px 14px;cursor:pointer;font-size:var(--uooc-fs-sm);font-family:inherit;transition:background .15s, opacity .2s; opacity: 0.12;";
         let _scanSubCleared = false;
+        btnScanClearInSub.addEventListener("mouseenter", () => {
+            btnScanClearInSub.style.opacity = "1";
+            if (!_scanSubCleared) btnScanClearInSub.style.background = C.clearBtnBgHover;
+        });
+        btnScanClearInSub.addEventListener("mouseleave", () => {
+            btnScanClearInSub.style.opacity = "0.12";
+            if (!_scanSubCleared) btnScanClearInSub.style.background = C.clearBtnBg;
+        });
         btnScanClearInSub.onclick = () => {
             if (_scanSubCleared) return;
             if (cbClearCache) cbClearCache();
@@ -3838,7 +3846,7 @@
             _renderCodeTo(scanSubBody, formatScanCacheForDisplay());
         };
 
-        btnScanSubRight.append(btnCopyScanSub, btnScanClearInSub, btnScanSubClose);
+        btnScanSubRight.append(btnScanClearInSub, btnCopyScanSub, btnScanSubClose);
         scanSubHeader.appendChild(btnScanSubRight);
 
         const scanSubBody = document.createElement("div");

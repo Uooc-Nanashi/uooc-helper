@@ -2,6 +2,8 @@
 
 [![通过 GitHub Raw 安装](https://img.shields.io/badge/%E9%80%9A%E8%BF%87_Github_Raw_%E5%AE%89%E8%A3%85-uooc--helper.user.js-green)](https://raw.githubusercontent.com/Uooc-Nanashi/uooc-helper/main/uooc-helper.user.js)
 
+[![通过 ScriptCat 安装](https://img.shields.io/badge/%e9%80%9a%e8%bf%87_ScriptCat_%e5%ae%89%e8%a3%85-uooc--helper.user.js-blue)](https://scriptcat.org/zh-CN/script-show-page/8524)
+
 [![获取测试版](https://img.shields.io/badge/%e8%8e%b7%e5%8f%96%e6%b5%8b%e8%af%95%e7%89%88-pre--releases%2fuooc--helper.user.js-yellow)](https://github.com/Uooc-Nanashi/uooc-helper/tree/main/pre-releases)
 
 Tampermonkey / Violentmonkey / ScriptCat 用户脚本，用于优课在线（UOOC）学习平台。

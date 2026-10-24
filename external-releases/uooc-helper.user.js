@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         UOOC 学习助手
 // @namespace    https://github.com/Uooc-Nanashi/uooc-helper
-// @version      1.0.3.e
+// @version      1.0.4.e
 // @description  UOOC 刷课脚本（专门适配优课联盟 / 优课在线 ）| 提供无需API的完全免费方案 · 开源 · 非商业 | 全自动完成课程 · 视频自动播放 · 智能完成测验（大模型网页版 + API 双方案）· 内置功能修复与扩展工具
 // @tag          uooc auto-script 优课在线
 // @author       Uooc-Nanashi
@@ -220,6 +220,7 @@
                document.querySelector(".video-js video") ||
                document.querySelector("video");
     }
+    /* 轮询等待 DOM 元素出现 .complete 类；元素失效或超时返回 false */
     /* 收集含 iframe 的 outerHTML，用于「复制当前页 outerHTML」 */
     async function collectOuterHTMLWithIframes() {
         const clone = document.documentElement.cloneNode(true);
@@ -345,7 +346,7 @@
                         _parts.push(token);
                         return _PH + idx + _PH;
                     });
-                    s = s.replace(/(^|[^0-9A-Za-z_"\u0001-])([0-9]+(?:[.][0-9]+)?)/g, (m, pre, num) => pre + '<span class="tok-num">' + num + '</span>');
+                    s = s.replace(/(^|[^0-9A-Za-z_"\u0001-])(-?[0-9]+(?:[.][0-9]+)?)/g, (m, pre, num) => pre + '<span class="tok-num">' + num + '</span>');
                     s = s.replace(new RegExp(_PH + "([0-9]+)" + _PH, "g"), (m, idx) => _parts[Number(idx)] || "");
                     return s;
                 } catch (e) { return escapeHTML(raw); }
@@ -386,6 +387,11 @@
             forceAspect: "none",
             challengeAlwaysVisible: false,
             submitMode: "manual",
+            clearBeforeFill: true,
+            textMaxLength: 5,
+            termMaxLength: 80,
+            qaMaxLength: 200,
+            essayMaxLength: 600,
         };
     }
     function loadSettings() {
@@ -401,6 +407,23 @@
                 forceAspect: ["none", "16:9", "4:3"].includes(s.forceAspect) ? s.forceAspect : "none",
                 challengeAlwaysVisible: s.challengeAlwaysVisible === true,
                 submitMode: s.submitMode === "auto" ? "auto" : "manual",
+                clearBeforeFill: s.clearBeforeFill !== false,
+                textMaxLength: (function () {
+                    var n = Number(s.textMaxLength);
+                    return Number.isFinite(n) && n >= 1 && n <= 10 ? Math.floor(n) : 5;
+                })(),
+                termMaxLength: (function () {
+                    var n = Number(s.termMaxLength);
+                    return Number.isFinite(n) && n >= 20 && n <= 500 ? Math.floor(n) : 80;
+                })(),
+                qaMaxLength: (function () {
+                    var n = Number(s.qaMaxLength);
+                    return Number.isFinite(n) && n >= 50 && n <= 1000 ? Math.floor(n) : 200;
+                })(),
+                essayMaxLength: (function () {
+                    var n = Number(s.essayMaxLength);
+                    return Number.isFinite(n) && n >= 100 && n <= 2000 ? Math.floor(n) : 600;
+                })(),
             };
         } catch (e) { return _defaultSettings(); }
     }
@@ -583,17 +606,6 @@
                 100% { transform: rotate(360deg); }
             }
             #uooc-helper-panel .select-refresh-btn.spinning svg { animation: uooc-refresh-spin .7s cubic-bezier(.34,1.3,.64,1); }
-            /* 数值/选项设置项悬浮变亮 */
-            #uooc-helper-panel input[type="number"],
-            #uooc-helper-panel select {
-                transition: background .15s, border-color .15s, box-shadow .15s;
-            }
-            #uooc-helper-panel input[type="number"]:hover,
-            #uooc-helper-panel select:hover {
-                background: #1a2330;
-                border-color: #3a4a56;
-                box-shadow: 0 0 0 3px rgba(255,255,255,0.08);
-            }
             /* 数值/选项设置项悬浮变亮 */
             #uooc-helper-panel input[type="number"],
             #uooc-helper-panel select {
@@ -1488,15 +1500,22 @@
            不再向跨域的 popup 挂自定义属性（会被同源策略拦截） */
         let popupMethodId = null;
 
-        function _ensurePopup(method) {
+        function _ensurePopup(method, urlOverride) {
             currentMethod = method || MethodStore.getActive();
             if (!currentMethod) throw new Error("没有可用的 AI 方案（请先在设置中选择或创建）");
             if (currentMethod.type === "http") return null;
-            const url = (currentMethod.config && currentMethod.config.url) || "https://chat.deepseek.com/";
+            const url = String(urlOverride || (currentMethod.config && currentMethod.config.url) || "https://chat.deepseek.com/");
             const baseName = (currentMethod.config && currentMethod.config.windowName) || "uooc_ai_window";
             /* 窗口 name 拼上 methodId：不同方案用不同窗口，天然避免复用错误窗口 */
             const name = baseName + "_" + currentMethod.id;
-            if (popup && !popup.closed && popupMethodId === currentMethod.id) return popup;
+            if (popup && !popup.closed && popupMethodId === currentMethod.id) {
+                /* 已在同一方案窗口：只有目标 URL 与已知当前 URL 不同才导航，
+                   避免“每个测验都重新加载 AI 页”带来的等待。 */
+                if (urlOverride && lastKnownUrl && lastKnownUrl !== url) {
+                    try { popup.location.href = url; } catch (e) {}
+                }
+                return popup;
+            }
             if (popup && !popup.closed) { try { popup.close(); } catch (e) {} }
             popup = window.open(url, name);
             if (!popup) throw new Error(
@@ -1504,8 +1523,8 @@
                 "请检查地址栏右侧的弹窗拦截提示，并确认 Tampermonkey 未把该 AI 域名加入「排除的域名」。"
             );
             popupMethodId = currentMethod.id;
-            /* 立即 focus，避免被浏览器放到后台导致 JS 暂停 */
-            try { popup.focus(); } catch (e) {}
+            /* 不抢焦点：主页面保持前台，AI 页靠 TICK 事件驱动应答，避免主页面被节流 */
+            try { window.focus(); } catch (e) {}
             ready = false;
             lastKnownUrl = "";
             configSent = false;
@@ -1718,7 +1737,14 @@
             openConversation(url) {
                 currentMethod = currentMethod || MethodStore.getActive();
                 if (currentMethod && currentMethod.type === "http") return;
-                _ensurePopup();
+                _ensurePopup(undefined, url);
+            },
+            navigate(url) {
+                if (currentMethod && currentMethod.type === "http") return;
+                if (popup && !popup.closed) {
+                    try { popup.location.href = url; return; } catch (e) {}
+                }
+                _ensurePopup(undefined, url);
             },
             closePopup() {
                 if (popup && !popup.closed) { try { popup.close(); } catch (e) {} }
@@ -1729,6 +1755,7 @@
             },
             isOpen() { return !!(popup && !popup.closed); },
             focus() { if (popup && !popup.closed) { try { popup.focus(); } catch (e) {} } },
+            blur() { if (popup && !popup.closed) { try { popup.blur(); } catch (e) {} } },
             getCurrentUrl() {
                 if (lastKnownUrl) return lastKnownUrl;
                 try { return popup && !popup.closed ? popup.location.href : null; } catch (e) { return null; }
@@ -1885,6 +1912,29 @@
         return null;
     }
 
+    /* 判断当前试卷页是否已经是“已提交”的结果页。
+       依据：.testPaper-Top 出现“提交时间/得分”，或存在题目列表且没有“提交试卷”按钮。
+       只用于完成态预检，不参与答题提取。 */
+    function isQuizSubmittedDoc(doc, allowWeak) {
+        try {
+            if (!doc) return false;
+            const top = doc.querySelector(".testPaper-Top");
+            const txt = top ? (top.innerText || top.textContent || "") : "";
+            /* 强判据：只有真正提交过的结果页才会出现“提交时间/得分”。 */
+            if (/提交时间\s*[:：]/.test(txt) || /得分\s*[:：]/.test(txt)) return true;
+            /* 弱判据仅在答题完成后的 _autoSubmitQuiz 里使用；
+               预检阶段禁用，避免题目已渲染但提交按钮尚未渲染时被误判为已提交。 */
+            if (!allowWeak) return false;
+            const hasList = !!doc.querySelector(".testPaperShow .queList");
+            if (!hasList) return false;
+            const nodes = doc.querySelectorAll("button, .btn, a.btn, div.btn");
+            for (const el of nodes) {
+                if (((el.innerText || el.textContent || "").trim()).includes("提交试卷")) return false;
+            }
+            return true;
+        } catch (e) { return false; }
+    }
+
     function getTaskpointInfo() {
         const doc = getQuizDoc();
         if (!doc) return { taskId: "unknown", title: "" };
@@ -1902,6 +1952,9 @@
                 if (t2) title = (t2.innerText || t2.textContent || "").trim();
             } catch (e) {}
         }
+        /* 已提交的试卷标题会附带 “[ 提交时间：… ]”，必须剥离，
+           否则同一测验每次进入都会变成新的任务点名，导致扫描结果匹配失败。 */
+        title = String(title || "").replace(/\[\s*提交时间\s*[:：][^\]]*\]/g, "").trim();
         return { taskId: taskId || title || "unknown", title };
     }
 
@@ -1930,7 +1983,7 @@
             let type = null;
             if (box.querySelector('input[type="radio"]')) type = "single";
             else if (box.querySelector('input[type="checkbox"]')) type = "multiple";
-            else if (box.querySelector(".ue-container")) type = "text";
+            else if (box.querySelector("textarea.ue-container1") || box.querySelector(".ue-container")) type = "text";
             if (!type) continue;
 
             const options = [];
@@ -1995,7 +2048,8 @@
             if (!c) continue;
             if (c.hash !== q.hash) continue;
             if (c.type !== q.type) continue;
-            if (!c.answer) continue;
+            /* 被标记为 "wrong" 的缓存答案不可再复用，强制重新作答 */
+            if (!c.answer || c.answer === "wrong") continue;
             if (q.type === "text") return c.answer;
             if (optionsEquivalent(c.options, q.options)) {
                 const mapped = remapAnswer(c.answer, c.options, q.options);
@@ -2038,15 +2092,16 @@
                 "4. 该「【答案】…」行必须位于整个回答的最后一行。",
             ].join(String.fromCharCode(10));
         }
+        const _textMax = Math.max(20, Math.min(1000, Number(getSettings().textMaxLength) || 60));
         return [
             ...header,
-            `【题型】文本输入题`,
+            `【题型】${(function(k){return {blank:"填空题",term:"名词解释",qa:"简答题",essay:"论述题"}[k]||"文本题";})(resolveKind(q)==="blank"?"blank":resolveRichKind(q))}`,
             `【题干】${q.question}`,
             "",
             "【回答要求】",
             "1. 你可以先在回答中简要分析或说明思路。",
             "2. 在回答的最后一段，另起一行，以「【答案】」开头，后紧跟你的最终答案。",
-            "3. 该答案本身不超过 60 个汉字，不含引号，不含换行。",
+            `3. ${(function(k,n){switch(k){case "blank":return "只填写答案内容，不要解释、不要抄题干；多空时按“第1空：答案；第2空：答案”格式输出，每空不超过 "+n+" 字";case "term":return "用 1–2 句话给出准确、完整的定义，不要举例、不要展开；不超过 "+n+" 字";case "essay":return "先给出明确观点，再分条给出论据与分析，逻辑清晰、层次分明；不超过 "+n+" 字";default:return "分点作答，覆盖关键要点即可；不超过 "+n+" 字";}})(resolveKind(q)==="blank"?"blank":resolveRichKind(q), limitFor(q))}`,
             "4. 该「【答案】…」行必须位于整个回答的最后一行。",
         ].join(String.fromCharCode(10));
     }
@@ -2076,7 +2131,8 @@
             return unique.length > 0 ? unique.join("") : null;
         }
         const t = seg.replace(/^["'`“”‘’]|["'`“”‘’]$/g, "").trim();
-        return t.slice(0, 60);
+        if (resolveKind(q) === "blank") return t.replace(/<[^>]+>/g, "").trim();
+            return t.slice(0, limitFor(q));
     }
 
     /* ============================================================
@@ -2132,8 +2188,21 @@
             return labels[idx];
         }).filter(Boolean));
 
-        let ok = false;
         const opts = q.boxEl.querySelectorAll(".ti-a");
+        const _clearFirst = getSettings().clearBeforeFill !== false;
+        if (_clearFirst) {
+            opts.forEach(opt => {
+                const input = opt.querySelector('input[type="radio"], input[type="checkbox"]');
+                if (input && input.checked) {
+                    try {
+                        input.checked = false;
+                        input.dispatchEvent(new Event("change", { bubbles: true }));
+                    } catch (e) {}
+                }
+            });
+        }
+
+        let ok = false;
         opts.forEach(opt => {
             const labelEl = opt.querySelector(".ti-a-i");
             let label = (labelEl?.innerText || "").trim().replace(/[\.\s].*/, "").slice(0, 2);
@@ -2149,8 +2218,70 @@
         return ok;
     }
 
+
+    /* 【题型四类】single / multiple / blank / rich（判断题=radio→single）
+       ⚠ 填空题暂无真实 DOM 样本，下列 blank 逻辑为“尽力而为”，可能需按实际 DOM 调整。 */
+    function resolveKind(q) {
+        const b = q && q.boxEl; if (!b) return "rich";
+        if (b.querySelector('input[type="checkbox"]')) return "multiple";
+        if (b.querySelector('input[type="radio"]')) return "single";
+        if (b.querySelector("textarea.ue-container1")) return "blank";
+        if (b.querySelector(".ue-container")) return "rich";
+        return "rich";
+    }
+    function resolveRichKind(q) {
+        const b = q && q.boxEl; if (!b) return "qa";
+        const el = b.querySelector(".queItems-type, .ti-q-type, .que-type, .type");
+        const t = el ? (el.textContent || "").replace(/\s+/g, "") : "";
+        if (/名词/.test(t)) return "term";
+        if (/论述/.test(t)) return "essay";
+        if (/简答|问答/.test(t)) return "qa";
+        return "qa";
+    }
+    function limitFor(q) {
+        const s = getSettings();
+        if (resolveKind(q) === "blank") return Math.max(1, Math.min(10, Number(s.textMaxLength) || 5));
+        const rk = resolveRichKind(q);
+        if (rk === "term") return Math.max(20, Math.min(500, Number(s.termMaxLength) || 80));
+        if (rk === "essay") return Math.max(100, Math.min(2000, Number(s.essayMaxLength) || 600));
+        return Math.max(50, Math.min(1000, Number(s.qaMaxLength) || 200));
+    }
+    function parseBlankAnswer(text) {
+        const raw = String(text || "").trim();
+        if (!raw) return [];
+        const out = [];
+        const re = /[\[【]?\s*第\s*(\d+)\s*空\s*[\]】]?\s*[:：]?\s*([^；;\n]*)/g;
+        let m;
+        while ((m = re.exec(raw))) {
+            const seg = (m[2] || "").trim();
+            const alts = seg.split(/[,，、\/|]/).map(s => s.trim()).filter(Boolean);
+            out[Number(m[1]) - 1] = alts[0] || "";
+        }
+        if (!out.length) return raw.split(/[；;]/).map(s => s.trim()).filter(Boolean);
+        for (let i = 0; i < out.length; i++) if (!out[i]) out[i] = "";
+        return out;
+    }
+
     async function fillTextAnswer(q, text) {
         if (!text) return false;
+        /* ⚠ 填空题暂无真实 DOM 样本，以下为尽力而为，可能出错 */
+        if (resolveKind(q) === "blank") {
+            const tas = Array.from(q.boxEl.querySelectorAll("textarea.ue-container1"));
+            if (!tas.length) return false;
+            const lim = Math.max(1, Math.min(10, Number(getSettings().textMaxLength) || 5));
+            const parts = parseBlankAnswer(text).map(s => String(s).slice(0, lim));
+            const setVal = (ta, v) => {
+                try {
+                    const setter = Object.getOwnPropertyDescriptor(window.HTMLTextAreaElement.prototype, "value").set;
+                    setter.call(ta, v);
+                    ta.dispatchEvent(new Event("input", { bubbles: true }));
+                    ta.dispatchEvent(new Event("change", { bubbles: true }));
+                } catch (e) {}
+            };
+            if (tas.length === 1) setVal(tas[0], parts.join("；"));
+            else tas.forEach((ta, i) => setVal(ta, parts[i] || ""));
+            return true;
+        }
         const ueBox = q.boxEl.querySelector(".ue-container");
         if (!ueBox) return false;
         let done = false;
@@ -2203,6 +2334,8 @@
         let stopRequested = false;
         let onChange = null;
         let _askProgress = null;
+        /* 记录 start 开始时间，用于检测 running 卡死 */
+        let _quizStartTs = 0;
 
         function _log(msg, type) { if (onChange) onChange("log", msg, type); }
         function _setStatus(t) { if (onChange) onChange("status", t); }
@@ -2231,6 +2364,12 @@
                     return true;
                 }
                 if (q.type === "text") {
+                    /* ⚠ 填空题暂无真实 DOM 样本，尽力而为 */
+                    if (resolveKind(q) === "blank") {
+                        const tas = Array.from(q.boxEl.querySelectorAll("textarea.ue-container1"));
+                        if (!tas.length) return false;
+                        return tas.every(ta => String(ta.value || "").trim().length > 0);
+                    }
                     const ueBox = q.boxEl.querySelector(".ue-container");
                     if (!ueBox) return false;
                     try {
@@ -2242,9 +2381,13 @@
                         const win = (doc && doc.defaultView) || window;
                         const UE = win.UE || (win.parent && win.parent.UE);
                         if (UE && UE.instants) {
+                            /* 只检查 container/iframe/editbox 落在当前 ueBox 内的实例，
+                               与 fillTextAnswer 口径一致，避免同页面多文本题时误判。 */
                             for (const k of Object.keys(UE.instants)) {
                                 const inst = UE.instants[k];
                                 if (!inst) continue;
+                                const ce = inst.container || inst.iframe || inst.editbox;
+                                if (!ce || !ueBox.contains(ce)) continue;
                                 try {
                                     const html = inst.getContent() || "";
                                     if (String(html).replace(/<[^>]+>/g, "").trim()) return true;
@@ -2306,12 +2449,10 @@
                     const isDsDomain = /^https?:\/\/chat\.deepseek\.com/.test(curUrl);
                     const isHome = isDsDomain && !/chat\.deepseek\.com\/a\/chat\/s\/[^/?#]+/.test(curUrl);
                     if (isHome) {
-                        _log("历史对话链接已失效，将创建新对话", "warn");
+                        _log("历史对话链接已失效，将在同一窗口创建新对话", "warn");
                         cache.deepseekConversationUrl = "";
                         QuizCache.save(cache);
-                        LLM_BRIDGE.closePopup();
-                        await sleep(300);
-                        LLM_BRIDGE.openConversation();
+                        try { LLM_BRIDGE.navigate("https://chat.deepseek.com/"); } catch (e2) {}
                         _log("已打开 AI（新对话），等待就绪…", "info");
                     } else {
                         _log("已打开 AI（历史对话），等待就绪…", "info");
@@ -2321,9 +2462,7 @@
                     _log(`打开历史对话失败：${e.message}，将创建新对话`, "warn");
                     cache.deepseekConversationUrl = "";
                     QuizCache.save(cache);
-                    try { LLM_BRIDGE.closePopup(); } catch (e2) {}
-                    await sleep(300);
-                    LLM_BRIDGE.openConversation();
+                    try { LLM_BRIDGE.navigate("https://chat.deepseek.com/"); } catch (e2) {}
                     _log("已打开 AI（新对话），等待就绪…", "info");
                     return;
                 }
@@ -2425,7 +2564,16 @@
 
         async function _handleAliyunCaptcha(doc) {
             const t0 = Date.now();
-            while (Date.now() - t0 < 20000) {
+            let hiddenMs = 0, _last = Date.now();
+            let _hiddenLogged = false;
+            while (true) {
+                const now = Date.now();
+                if (document.visibilityState === "hidden") hiddenMs += now - _last;
+                _last = now;
+                const activeMs = now - t0 - hiddenMs;
+                if (activeMs > 20000 && document.visibilityState !== "hidden") break;
+                if (now - t0 > 180000) break;
+
                 const body = doc.querySelector("#aliyunCaptcha-checkbox-body");
                 if (body && (body.classList.contains("verified") || /验证通过/.test(body.innerText || ""))) {
                     _log("智能验证已通过", "ok");
@@ -2454,30 +2602,72 @@
                         } catch (e) {}
                     }
                 }
-                await sleep(1000);
+                if (document.visibilityState === "hidden" && !_hiddenLogged) {
+                    _hiddenLogged = true;
+                    _log("原标签页在后台，浏览器正在节流计时；切回可立即继续", "warn");
+                }
+                await sleep(500);
             }
             _log("智能验证等待超时", "warn");
             return false;
         }
 
         async function _waitQuizSubmitResult(doc, timeoutMs) {
-            const t0 = Date.now();
-            while (Date.now() - t0 < timeoutMs) {
-                const text = (doc.body && doc.body.innerText) || "";
-                if (/测验通过/.test(text)) return "passed";
-                if (/请重新提交测验|重新提交/.test(text)) return "failed";
-
-                const dlg = doc.querySelector("#commitConfirmDialog");
-                if (!dlg || dlg.style.display === "none") {
-                    return "submitted";
-                }
-                await sleep(500);
-            }
-            return "timeout";
+            /* MutationObserver 负责后台场景下的即时信号，setInterval 作为兜底。
+               超时只累计“可见时间”，hidden 期间不计入，避免切标签导致误判。 */
+            return await new Promise(resolve => {
+                const t0 = Date.now();
+                let settled = false;
+                let hiddenMs = 0, _last = Date.now(), _dialogClosedAt = 0;
+                let obs = null;
+                let timer = null;
+                const finish = (r) => {
+                    if (settled) return;
+                    settled = true;
+                    try { if (obs) obs.disconnect(); } catch (e) {}
+                    try { if (timer) clearInterval(timer); } catch (e) {}
+                    resolve(r);
+                };
+                const check = () => {
+                    if (settled) return;
+                    const now = Date.now();
+                    if (document.visibilityState === "hidden") hiddenMs += now - _last;
+                    _last = now;
+                    const activeMs = now - t0 - hiddenMs;
+                    const body = doc.body || doc.documentElement;
+                    const text = (body && body.innerText) || "";
+                    if (/测验通过/.test(text)) { finish("passed"); return; }
+                    if (/请重新提交测验|重新提交/.test(text)) { finish("failed"); return; }
+                    const dlg = doc.querySelector("#commitConfirmDialog");
+                    const isClosed = (!dlg || dlg.style.display === "none");
+                    if (isClosed) {
+                        if (_dialogClosedAt === 0) _dialogClosedAt = now;
+                        /* 弹窗消失不能单独作为成功依据：必须同时看到结果页签名
+                           （提交时间 / 得分），否则可能是误关/误点，继续等到超时。 */
+                        if (now - _dialogClosedAt > 3000) {
+                            const _top = doc.querySelector(".testPaper-Top");
+                            const _topTxt = _top ? (_top.innerText || _top.textContent || "") : "";
+                            const _hasResult = /提交时间\s*[:：]/.test(_topTxt) || /得分\s*[:：]/.test(_topTxt);
+                            if (_hasResult) { finish("submitted"); return; }
+                        }
+                    } else {
+                        _dialogClosedAt = 0;
+                    }
+                    if (activeMs > timeoutMs && document.visibilityState !== "hidden") { finish("timeout"); return; }
+                    if (now - t0 > 180000) finish("timeout");
+                };
+                try {
+                    obs = new MutationObserver(check);
+                    obs.observe(doc.body || doc.documentElement, { childList: true, subtree: true, characterData: true });
+                } catch (e) {}
+                timer = setInterval(check, 500);
+                check();
+            });
         }
 
         async function _autoSubmitQuiz(doc) {
-            if (!doc) doc = getQuizDoc();
+            /* 重新取一次文档：答题期间 iframe 可能被 Angular 重建，旧引用可能失效 */
+            doc = getQuizDoc() || doc;
             if (!doc) {
                 _log("未找到测验文档，无法自动提交", "err");
                 return false;
@@ -2485,15 +2675,24 @@
 
             const submitPaperBtn = _findButtonByText(doc, "提交试卷");
             if (!submitPaperBtn) {
+                if (isQuizSubmittedDoc(doc, true)) {
+                    _log("未找到「提交试卷」按钮，但检测到测验已提交，按完成处理", "ok");
+                    return true;
+                }
                 _log("未找到「提交试卷」按钮，可能已提交或不在测验页", "warn");
                 return false;
             }
 
             _log("点击「提交试卷」…", "run");
             await _humanClick(submitPaperBtn, doc);
-            await sleep(1200);
 
-            const confirmDialog = doc.querySelector("#commitConfirmDialog");
+            let confirmDialog = null;
+            const _dlgDeadline = Date.now() + 8000;
+            while (Date.now() < _dlgDeadline) {
+                confirmDialog = doc.querySelector("#commitConfirmDialog");
+                if (confirmDialog) break;
+                await sleep(200);
+            }
             if (!confirmDialog) {
                 _log("未找到提交确认弹窗", "warn");
                 return false;
@@ -2506,8 +2705,6 @@
                 return false;
             }
 
-            await sleep(600);
-
             const finalBtn =
                 _findButtonByText(doc, "提交", confirmDialog) ||
                 doc.querySelector("#commitConfirmDialog .begin .btn-warning");
@@ -2517,14 +2714,14 @@
                 return false;
             }
 
-            if (finalBtn.disabled || finalBtn.classList.contains("disabled") || finalBtn.getAttribute("disabled") !== null) {
-                _log("最终提交按钮仍禁用，等待验证结果…", "warn");
-                await sleep(2000);
+            const _btnDeadline = Date.now() + 8000;
+            while (Date.now() < _btnDeadline) {
+                if (!(finalBtn.disabled || finalBtn.classList.contains("disabled") || finalBtn.getAttribute("disabled") !== null)) break;
+                await sleep(200);
             }
 
             _log("点击最终提交…", "run");
             await _humanClick(finalBtn, doc);
-            await sleep(2000);
 
             const result = await _waitQuizSubmitResult(doc, 15000);
             if (result === "passed") {
@@ -2554,8 +2751,27 @@
 
         async function start(opts) {
             const isRecursive = !!(opts && opts.isRecursive);
-            if (running) return { ok: 0, skip: 0, submitted: false };
+            /* 若 running 为 true 且无进行中的实际任务（通过 _quizStartTs 判断），
+               强制复位。原实现一旦中途抛出未捕获异常会永远卡死，用户必须刷新页面。 */
+            if (running) {
+                const _stuckMs = Date.now() - (_quizStartTs || 0);
+                if (_stuckMs > 180000) {
+                    _log("检测到上一次智能闯关可能已卡死（>180s），强制复位 running 状态后重新开始", "warn");
+                    running = false;
+                } else {
+                    return { ok: 0, skip: 0, submitted: false };
+                }
+            }
+            _quizStartTs = Date.now();
             const cache = QuizCache.ensure();
+
+            /* 已提交的测验直接返回，避免打开 AI、重复答题。 */
+            try {
+                if (isQuizSubmittedDoc(getQuizDoc())) {
+                    _log("检测到该测验已提交（提交时间/得分），按完成处理", "ok");
+                    return { ok: 0, skip: 0, submitted: true, alreadySubmitted: true };
+                }
+            } catch (e) {}
 
             try {
                 await _openWithFallback(cache);
@@ -2718,6 +2934,34 @@
                 }
                 unresolvedIdx = next;
             }
+
+            /* 【焦点/节流·低风险方案】不关闭 AI 页，避免多测验递归时 window.open 被浏览器拦截。
+               这里只做 best-effort：先让 AI 窗口失焦，再请求原标签页聚焦，并记录可见性提示。
+               长期方案（需要改 @grant 或浏览器扩展能力，暂不实施）：
+                 1) GM_openInTab(url, { active:false }) 后台打开 AI 页，原页始终前台；
+                 2) chrome.tabs.update({active:true})（仅扩展可用）；
+                 3) 把 AI 开成独立 popup 窗口，关闭时焦点自然回到 opener。
+               注意：window.focus() 可能被浏览器忽略，所以这里不强制、不关闭窗口。 */
+            try {
+                const _curMethod = MethodStore.getActive();
+                if (_curMethod && _curMethod.type === "webpage") {
+                    try {
+                        const _u = LLM_BRIDGE.getCurrentUrl();
+                        if (_u && /^https?:\/\//.test(_u)) {
+                            cache.deepseekConversationUrl = _u;
+                            QuizCache.save(cache);
+                        }
+                    } catch (e) {}
+                    try { LLM_BRIDGE.blur(); } catch (e) {}
+                    try { window.focus(); } catch (e) {}
+                    if (document.visibilityState !== "visible") {
+                        _log("⚠ 原标签页仍在后台，浏览器会节流计时；请手动切回本页", "warn");
+                    } else {
+                        _log("已返回原标签页继续", "info");
+                    }
+                }
+            } catch (e) {}
+
             if (unresolvedIdx.length > 0) {
                 const errMsg = `❌ ${unresolvedIdx.length} 道题重试 ${_MAX_RETRY} 次后仍未成功：第 ${unresolvedIdx.map(i => i + 1).join("、")} 题`;
                 _log(errMsg, "err");
@@ -2733,6 +2977,7 @@
             }
 
             running = false;
+            _quizStartTs = 0;
 
             let autoSubmitted = false;
             try {
@@ -2746,6 +2991,76 @@
             } catch (e) {
                 _log(`自动提交异常：${e && e.message ? e.message : e}`, "err");
             }
+
+            /* 【新增】提交后按题复盘（仅选择题）：若"你的答案"≠"正确答案"，
+               把该题缓存答案置为 "wrong"，下次不再复用（配合 findReusableAnswer 的跳过）。
+               依赖 .answerBox 的"正确答案/你的答案"结构；结果页结构不同或题目无 boxEl 时安全跳过。 */
+            try {
+                if (autoSubmitted) {
+                    let _scanQs = [];
+                    try { if (typeof QuizExtractor_extract === "function") _scanQs = QuizExtractor_extract() || []; } catch (e) {}
+                    if (!_scanQs.length) _scanQs = (typeof questions !== "undefined" && questions) ? questions : [];
+                    const _cache2 = QuizCache.ensure();
+                    const _byHash = new Map();
+                    for (const _tid in _cache2.taskpoints) {
+                        const _tp = _cache2.taskpoints[_tid];
+                        if (_tp && Array.isArray(_tp.questions)) for (const _e0 of _tp.questions) _byHash.set(_e0.hash, _e0);
+                    }
+                    let _marked = 0;
+                    for (const _q of _scanQs) {
+                        if (_q.type !== "single" && _q.type !== "multiple") continue;
+                        const _box = (_q.boxEl && _q.boxEl.querySelector) ? _q.boxEl.querySelector(".answerBox") : null;
+                        if (!_box) continue;
+                        /* ① 分数优先：读“满分/得分”，得分 < 满分 即错 */
+                        let _isWrong = false, _decided = false;
+                        try {
+                            let _box2 = _q.boxEl;
+                            if (!_box2 || !_box2.isConnected) {
+                                const _all = Array.from(document.querySelectorAll(".queContainer"));
+                                _box2 = _all.find(el => (el.textContent || "").includes(String(_q.question || "").slice(0, 20))) || _all[0] || null;
+                            }
+                            const _scWrap = _box2 ? (_box2.querySelector(".scores") || (_box2.parentElement && _box2.parentElement.querySelector(".scores"))) : null;
+                            if (_scWrap) {
+                                const _txt = (_scWrap.textContent || "").replace(/\s+/g, "");
+                                const _m = _txt.match(/满分[:：]?([\d.]+).*?得分[:：]?([\d.]+)/);
+                                if (_m) {
+                                    const _full = parseFloat(_m[1]), _got = parseFloat(_m[2]);
+                                    if (!isNaN(_full) && !isNaN(_got)) { _isWrong = _got < _full; _decided = true; }
+                                } else {
+                                    const _el = _scWrap.querySelector(".color-red");
+                                    const _v = _el ? parseFloat((_el.textContent || "").replace(/[^\d.]/g, "")) : NaN;
+                                    if (!isNaN(_v)) { _isWrong = !(_v > 0); _decided = true; }
+                                }
+                            }
+                        } catch (e) {}
+                        if (!_decided) {
+                            let _correct = "", _mine = "";
+                            _box.querySelectorAll(".answerBox-title").forEach(t => {
+                                const _t = (t.textContent || "").trim();
+                                const _c = t.nextElementSibling ? (t.nextElementSibling.textContent || "").trim() : "";
+                                if (_t.includes("正确答案")) _correct = _c;
+                                else if (_t.includes("你的答案")) _mine = _c;
+                            });
+                            const _labels = new Set((_q.options || []).map(o => (o.label || "").toUpperCase()));
+                            const _norm = (s) => Array.from(new Set((String(s || "").toUpperCase().match(/[A-Z]/g) || []).filter(L => _labels.has(L)))).sort().join("");
+                            const _cN = _norm(_correct), _mN = _norm(_mine);
+                            _isWrong = !!(_cN && _mN && _cN !== _mN);
+                        }
+                        if (_isWrong) {
+                            const _e = _byHash.get(_q.hash);
+                            if (_e) { _e.answer = "wrong"; _e.timestamp = Date.now(); _marked++; }
+                        }
+                    }
+                    if (_marked > 0) {
+                        QuizCache.save(_cache2);
+                        _log(`⚠ 已标记 ${_marked} 道选择题为错题（缓存答案=wrong），下次将重新作答`, "warn");
+                    }
+                }
+            } catch (e) {
+                _log("错题复盘异常：" + (e && e.message ? e.message : e), "warn");
+            }
+
+
 
             _log(`智能闯关流程结束：成功 ${ok} 题，跳过 ${skip} 题`, skip > 0 ? "warn" : "ok");
             return { ok, skip, submitted: autoSubmitted };
@@ -2775,6 +3090,7 @@
         let _quizFillAnswerRunning = false;
         let _quizCompletedOnce = false;
         let _quizCompletedResetTimer = null;
+        let _uiAsRunning = false;
         /* 递归当前是否正在处理测验任务点。
            用于在递归运行中（自动提交开启）时让智能答题按钮先显示"等待递归进程…"，
            到测验任务点后切回正常显示并同步测验完成进度。 */
@@ -3333,6 +3649,32 @@
                 refreshButtonStates();
             }
         );
+        /* 忽略章节锁的设置项已移除：遇到锁一律停止，不做跳过处理 */
+
+        const toggleClearBeforeFill = mkSettingToggle(
+            "填入前清空已选选项",
+            "开启后，填入答案前先清除页面上已有的选中项，避免多选题因残留选项而答错；关闭则直接在现有基础上补充勾选。",
+            getSettings().clearBeforeFill,
+            (on) => { setSettings({ clearBeforeFill: on }); }
+        );
+
+        const inputTextMaxLength = document.createElement("input");
+        inputTextMaxLength.type = "number";
+        inputTextMaxLength.step = "1";
+        inputTextMaxLength.placeholder = "范围：1 ~ 10";
+        inputTextMaxLength.value = String(getSettings().textMaxLength);
+        const inputTermMaxLength = document.createElement("input");
+        inputTermMaxLength.type = "number"; inputTermMaxLength.step = "10"; inputTermMaxLength.placeholder = "范围：20 ~ 500";
+        inputTermMaxLength.style.cssText = "width:100%;box-sizing:border-box;padding:6px 8px;background:#101418;color:#e6e6e6;border:1px solid #2a2f36;border-radius:4px;font-family:inherit;font-size:var(--uooc-fs-sm);";
+        inputTermMaxLength.value = String(getSettings().termMaxLength);
+        const inputQaMaxLength = document.createElement("input");
+        inputQaMaxLength.type = "number"; inputQaMaxLength.step = "10"; inputQaMaxLength.placeholder = "范围：50 ~ 1000";
+        inputQaMaxLength.style.cssText = inputTermMaxLength.style.cssText;
+        inputQaMaxLength.value = String(getSettings().qaMaxLength);
+        const inputEssayMaxLength = document.createElement("input");
+        inputEssayMaxLength.type = "number"; inputEssayMaxLength.step = "50"; inputEssayMaxLength.placeholder = "范围：100 ~ 2000";
+        inputEssayMaxLength.style.cssText = inputTermMaxLength.style.cssText;
+        inputEssayMaxLength.value = String(getSettings().essayMaxLength);
 
         const chSubmitSelect = document.createElement("select");
         chSubmitSelect.innerHTML = `
@@ -3351,6 +3693,17 @@
             } catch (e) {}
             _log(`提交方式已切换为：${mode === "auto" ? "自动提交（自动完成智能验证并提交）" : "手动提交"}`, "info");
             try { UI.refreshButtonStates(); UI.updateSubmitModeUI(); } catch (e) {}
+            /* 【修复】切换提交方式后，任务选择页的"断点 = …"、"断点前空缺 N 个"、
+               "断点后待完成 N 个"以及"当前为手动提交，递归不会处理测验"等提示
+               都是 refreshAfterScanItemsChanged() 绘制的，必须重绘一次才能与设置同步。
+               否则切到自动提交后提示仍显示"当前为手动提交"，且断点判断仍按旧口径。
+               加了 scanItems.length > 0 守卫：未扫描时任务选择页显示的是初始引导文案
+               "尚未扫描…"，不该被"共扫描到任务点 0 个…"覆盖。 */
+            try {
+                if (scanItems && scanItems.length > 0) {
+                    refreshAfterScanItemsChanged();
+                }
+            } catch (e) {}
         });
 
         const aiMethodSelect = document.createElement("select");
@@ -3540,6 +3893,11 @@
                 mkAiMethodSelectRow(),
                 btnManageMethods,
                 toggleChallengeAlways.wrap,
+                toggleClearBeforeFill.wrap,
+                mkSettingBlock("填空题最大字数", "每个空允许的字数上限（多空按分号分隔）。默认 5，范围 1 ~ 10。（⚠ 填空题暂无真实 DOM 样本，功能可能需按实际页面调整）", inputTextMaxLength, 1, 10),
+                mkSettingBlock("名词解释最大字数", "富文本·名词解释的答案字数上限。默认 80，范围 20 ~ 500。", inputTermMaxLength, 20, 500),
+                mkSettingBlock("简答题最大字数", "富文本·简答题的答案字数上限。默认 200，范围 50 ~ 1000。", inputQaMaxLength, 50, 1000),
+                mkSettingBlock("论述题最大字数", "富文本·论述题的答案字数上限。默认 600，范围 100 ~ 2000。", inputEssayMaxLength, 100, 2000),
                 mkSettingSelect("提交方式", "选择测验提交方式。手动提交：测验需要自行提交，递归只处理视频任务点。自动提交：将模拟人类完成智能验证提交测验，递归处理对象将包括测验任务点", chSubmitSelect),
             ]),
             setBtnRow
@@ -3577,11 +3935,21 @@
             let r = Number(inputVideoPlaybackRate.value);
             if (!Number.isFinite(r) || r <= 0) r = d.videoPlaybackRate;
             r = Math.max(0.5, Math.min(16, r));
+            let tl = Number(inputTextMaxLength.value);
+            if (!Number.isFinite(tl) || tl <= 0) tl = d.textMaxLength;
+            tl = Math.max(1, Math.min(10, Math.floor(tl)));
+            let tm = Number(inputTermMaxLength.value); if (!Number.isFinite(tm) || tm <= 0) tm = d.termMaxLength; tm = Math.max(20, Math.min(500, Math.floor(tm)));
+            let qa = Number(inputQaMaxLength.value); if (!Number.isFinite(qa) || qa <= 0) qa = d.qaMaxLength; qa = Math.max(50, Math.min(1000, Math.floor(qa)));
+            let es = Number(inputEssayMaxLength.value); if (!Number.isFinite(es) || es <= 0) es = d.essayMaxLength; es = Math.max(100, Math.min(2000, Math.floor(es)));
             inputAutoScanInterval.value = String(a);
             inputVideoPlaybackRate.value = String(r);
+            inputTextMaxLength.value = String(tl);
+            inputTermMaxLength.value = String(tm);
+            inputQaMaxLength.value = String(qa);
+            inputEssayMaxLength.value = String(es);
             const forceAspect = ["none", "16:9", "4:3"].includes(selectForceAspect.value) ? selectForceAspect.value : "none";
             const submitMode = chSubmitSelect.value === "auto" ? "auto" : "manual";
-            setSettings({ autoScanInterval: a, videoPlaybackRate: r, forceAspect: forceAspect, submitMode: submitMode });
+            setSettings({ autoScanInterval: a, videoPlaybackRate: r, forceAspect: forceAspect, submitMode: submitMode, textMaxLength: tl, termMaxLength: tm, qaMaxLength: qa, essayMaxLength: es });
             applyForceAspect(forceAspect);
             /* QuizCache 仅作兼容写入，不影响权威来源 */
             try {
@@ -3590,7 +3958,6 @@
                 QuizCache.save(qc);
             } catch (e) {}
             _log("设置已保存", "ok");
-            if (autoScanTimer) { stopAutoScanLoop(); startAutoScanLoop(); }
             _flashSaveButton(btnSettingsSave);
         };
         btnSettingsReset.onclick = () => {
@@ -3598,9 +3965,14 @@
             setSettings(d);
             inputAutoScanInterval.value = String(d.autoScanInterval);
             inputVideoPlaybackRate.value = String(d.videoPlaybackRate);
+            inputTextMaxLength.value = String(d.textMaxLength);
+            inputTermMaxLength.value = String(d.termMaxLength);
+            inputQaMaxLength.value = String(d.qaMaxLength);
+            inputEssayMaxLength.value = String(d.essayMaxLength);
             selectForceAspect.value = d.forceAspect;
             toggleMobile.setChecked(d.mobileView);
             toggleChallengeAlways.setChecked(d.challengeAlwaysVisible);
+            toggleClearBeforeFill.setChecked(d.clearBeforeFill);
             chSubmitSelect.value = "manual";
             applyMobileView(d.mobileView);
             applyForceAspect(d.forceAspect);
@@ -3608,7 +3980,6 @@
             qc.submitMode = "manual";
             QuizCache.save(qc);
             _log("已恢复默认设置", "ok");
-            if (autoScanTimer) { stopAutoScanLoop(); startAutoScanLoop(); }
         };
 
         /* -------- 题目缓存子页面 -------- */
@@ -3634,7 +4005,28 @@
         const btnSubClose = document.createElement("button");
         btnSubClose.textContent = "关闭";
         btnSubClose.style.cssText = `padding:5px 14px;border:none;border-radius:4px;background:${C.interactiveBg};color:${C.interactiveFg};cursor:pointer;font-size:var(--uooc-fs-sm);font-weight:bold;font-family:inherit;min-height:var(--uooc-touch-hit);`;
-        subHeaderRight.append(btnCacheClearInSub, btnSubClose);
+        const btnCopyQuizSub = document.createElement("button");
+        btnCopyQuizSub.textContent = "复制";
+        const COPY_BG_DEFAULT = "#6b8e6f";
+        const COPY_BG_OK = C.runBg;
+        const COPY_BG_ERR = C.redirectBg;
+        btnCopyQuizSub.style.cssText = "padding:5px 14px;border:none;border-radius:4px;background:" + COPY_BG_DEFAULT + ";color:#fff;cursor:pointer;font-size:var(--uooc-fs-sm);font-weight:bold;font-family:inherit;min-height:var(--uooc-touch-hit);transition:background .3s ease;margin-right:4px;";
+        btnCopyQuizSub.onclick = async () => {
+            try {
+                const d = QuizCache.load();
+                const rawText = formatCacheForDisplay(d);
+                await copyTextToClipboard(rawText);
+                btnCopyQuizSub.textContent = "已复制";
+                btnCopyQuizSub.style.background = COPY_BG_OK;
+                UI.log("题目缓存已复制到剪贴板", "ok");
+            } catch (e) {
+                btnCopyQuizSub.textContent = "失败";
+                btnCopyQuizSub.style.background = COPY_BG_ERR;
+                UI.log("复制失败：" + e.message, "err");
+            }
+            setTimeout(() => { btnCopyQuizSub.textContent = "复制"; btnCopyQuizSub.style.background = COPY_BG_DEFAULT; }, 3000);
+        };
+        subHeaderRight.append(btnCacheClearInSub, btnCopyQuizSub, btnSubClose);
         subHeader.appendChild(subHeaderRight);
 
         const subBody = document.createElement("div");
@@ -3712,7 +4104,7 @@
         chLogWrap.append(chLogHead, chLog);
         pageChallenge.appendChild(chLogWrap);
 
-        /* 【v0.12.18】题目缓存/扫描缓存均以 JSON 格式输出 */
+        /* 题目缓存/扫描缓存均以 JSON 格式输出 */
         function formatCacheForDisplay(d) {
             if (!d) return "（当前课程暂无闯关缓存）";
             return JSON.stringify(d, null, 2);
@@ -3774,17 +4166,57 @@
         const btnScanSubClose = document.createElement("button");
         btnScanSubClose.textContent = "关闭";
         btnScanSubClose.style.cssText = `padding:5px 14px;border:none;border-radius:4px;background:${C.interactiveBg};color:${C.interactiveFg};cursor:pointer;font-size:var(--uooc-fs-sm);font-weight:bold;font-family:inherit;min-height:var(--uooc-touch-hit);`;
-        scanSubHeader.appendChild(btnScanSubClose);
+        const btnScanSubRight = document.createElement("div");
+        btnScanSubRight.style.cssText = "display:flex;gap:8px;align-items:center;";
+
+        const btnCopyScanSub = document.createElement("button");
+        btnCopyScanSub.textContent = "复制";
+        btnCopyScanSub.style.cssText = "padding:5px 14px;border:none;border-radius:4px;background:#6b8e6f;color:#fff;cursor:pointer;font-size:var(--uooc-fs-sm);font-weight:bold;font-family:inherit;min-height:var(--uooc-touch-hit);transition:background .3s ease;";
+        btnCopyScanSub.onclick = async () => {
+            try {
+                const rawText = formatScanCacheForDisplay();
+                await copyTextToClipboard(rawText);
+                btnCopyScanSub.textContent = "已复制";
+                btnCopyScanSub.style.background = C.runBg;
+            } catch (e) {
+                btnCopyScanSub.textContent = "失败";
+                btnCopyScanSub.style.background = C.redirectBg;
+            }
+            setTimeout(() => { btnCopyScanSub.textContent = "复制"; btnCopyScanSub.style.background = "#6b8e6f"; }, 3000);
+        };
+
+        const btnScanClearInSub = document.createElement("button");
+        btnScanClearInSub.textContent = "🗑 缓存";
+        btnScanClearInSub.style.cssText = "background:" + C.clearBtnBg + ";color:#fff;border:none;border-radius:4px;padding:5px 14px;cursor:pointer;font-size:var(--uooc-fs-sm);font-family:inherit;transition:background .15s, opacity .2s; opacity: 0.12;";
+        let _scanSubCleared = false;
+        btnScanClearInSub.addEventListener("mouseenter", () => {
+            btnScanClearInSub.style.opacity = "1";
+            if (!_scanSubCleared) btnScanClearInSub.style.background = C.clearBtnBgHover;
+        });
+        btnScanClearInSub.addEventListener("mouseleave", () => {
+            btnScanClearInSub.style.opacity = "0.12";
+            if (!_scanSubCleared) btnScanClearInSub.style.background = C.clearBtnBg;
+        });
+        btnScanClearInSub.onclick = () => {
+            if (_scanSubCleared) return;
+            if (cbClearCache) cbClearCache();
+            _scanSubCleared = true;
+            _applyClearBtnState(btnScanClearInSub, true, "🗑 缓存", "🗑 缓存已清除");
+            _renderCodeTo(scanSubBody, formatScanCacheForDisplay());
+        };
+
+        btnScanSubRight.append(btnScanClearInSub, btnCopyScanSub, btnScanSubClose);
+        scanSubHeader.appendChild(btnScanSubRight);
 
         const scanSubBody = document.createElement("div");
         scanSubBody.className = "uooc-scroll code-render uooc-selectable";
         scanSubBody.style.cssText = "flex:1;overflow:auto;padding:0;";
         scanSubPage.append(scanSubHeader, scanSubBody);
 
-        /* 【v0.12.18】扫描缓存改为 JSON 输出 */
+        /* 扫描缓存改为 JSON 输出 */
         function formatScanCacheForDisplay() {
             const obj = {
-                version: STORAGE_VERSION_PREFIX,
+                version: SCAN_CACHE_VERSION,
                 courseId: getCourseId() || "",
                 courseName: getCourseName() || "",
                 challengeMode: !!challengeMode,
@@ -3816,6 +4248,8 @@
 
         btnScanView.onclick = () => {
             _renderCodeTo(scanSubBody, formatScanCacheForDisplay());
+            _scanSubCleared = false;
+            _applyClearBtnState(btnScanClearInSub, false, "🗑 缓存", "🗑 缓存已清除");
             scanSubPage.style.display = "flex";
             updatePanelHeightMode();
         };
@@ -3987,7 +4421,7 @@
             document.addEventListener("mousemove", e => _move(e.clientX, e.clientY));
             document.addEventListener("mouseup", _end);
 
-            /* 【v0.12.2】触屏拖动：仅移动版视图启用 */
+            /* 触屏拖动：仅移动版视图启用 */
             header.addEventListener("touchstart", e => {
                 if (!getSettings().mobileView) return;
                 if (e.target === btnFold) return;
@@ -4128,6 +4562,8 @@
         optB.wrap.onclick = () => selectOption("B");
 
         function paintAutoScanButton() {
+            // 视觉开启条件：只看"配置是否启用"。是否正在轮询由状态栏"自动更新中…"徽标单独表示，
+            // 避免"已启用但暂时没在跑"被误画成关闭，导致点击逻辑反转。
             if (_autoScanEnabled) {
                 autoScanWrap.style.background = C.interactiveBgOn;
                 autoScanWrap.style.borderColor = C.interactiveBd;
@@ -4173,7 +4609,7 @@
 
             const autoSubmit = _isAutoSubmit();
             if (_running) {
-                btnStart.textContent = "⏸ 暂停递归";
+                btnStart.textContent = _scanning ? "⏸ 暂停重扫" : "⏸ 暂停递归";
                 btnStart.style.background = C.pauseBg;
                 btnStart.style.color = C.pauseFg;
                 btnStart.disabled = false;
@@ -4250,6 +4686,7 @@
         btnQuizRecord.onclick = () => { if (cbQuizRecord) cbQuizRecord(); };
 
         autoScanWrap.onclick = () => {
+            // 直接按"当前配置"取反，视觉与实际开关严格一致
             _autoScanEnabled = !_autoScanEnabled;
             paintAutoScanButton();
             if (cbAutoScanToggle) cbAutoScanToggle(_autoScanEnabled);
@@ -4290,10 +4727,13 @@
             chStatusText.textContent = "状态：" + t;
             statusText.textContent = "状态：" + t;
         }
-        function setQuizSubmitMode(mode) {
+        function setQuizSubmitMode(mode, skipCacheWrite) {
             const m = mode === "auto" ? "auto" : "manual";
             chSubmitSelect.value = m;
             try { setSettings({ submitMode: m }); } catch (e) {}
+            /* init() 里的调用只用于把下拉框与 settings 同步，
+               不应反向覆盖 QuizCache 中可能更权威的 submitMode 偏好。 */
+            if (skipCacheWrite) return;
             try {
                 const d = QuizCache.ensure();
                 d.submitMode = m;
@@ -4409,7 +4849,7 @@
             getQuizSubmitMode,
             refreshButtonStates,
             updateSubmitModeUI,
-            /* 【v0.12.20 修复】同时给智能答题按钮的 paintQuizButton 提供互斥判断 */
+            /* 同时给智能答题按钮的 paintQuizButton 提供互斥判断 */
             _registerMutexCheck(fn) {
                 _externalMutexCheck = fn;
                 _anyMutexRunningCb = function () {
@@ -4418,6 +4858,10 @@
                         return !!(st && st.any);
                     } catch (e) { return false; }
                 };
+            },
+            setAutoScanRunning(v) {
+                _uiAsRunning = !!v;
+                try { paintAutoScanButton(); } catch (e) {}
             }
         };
     })();
@@ -5037,7 +5481,7 @@ body { font-family: -apple-system, "Segoe UI", "Microsoft YaHei", sans-serif; ba
     var _editMode = "code";
     var _draftMethod = null;
 
-    /* 【v0.12.24】预设模型系列注册表：新增预设只需在这里加一项 */
+    /* 预设模型系列注册表：新增预设只需在这里加一项 */
     var PRESETS = {
         deepseek: {
             name: "DeepSeek",
@@ -5218,7 +5662,7 @@ body { font-family: -apple-system, "Segoe UI", "Microsoft YaHei", sans-serif; ba
             input.value = value || "";
             if (toggle) toggle.style.display = "none";
         }
-        /* 【v0.12.21】切换预设 / 模式后立即刷新必填态，
+        /* 切换预设 / 模式后立即刷新必填态，
            避免 model 字段停留在旧的红色状态（required-invalid） */
         try { validateRequired(); } catch (err) {}
     }
@@ -5505,7 +5949,7 @@ body { font-family: -apple-system, "Segoe UI", "Microsoft YaHei", sans-serif; ba
         renderEditor();
     }
 
-    /* 【v0.12.24】保存按钮状态管理 */
+    /* 保存按钮状态管理 */
     var _savedSnapshot = null;
     function _currentSnapshot() {
         try {
@@ -6859,61 +7303,612 @@ textarea, pre, .report-body { flex: 1; background: #0d1117; color: #e6e6e6; bord
     let stopRequested = false;
     let scanCancelFlag = false;
 
-    /* 【v0.12.21】本次递归已成功处理（playTaskpoint / processNonVideoTaskpoint 返回 true）
+    /* 本次调度会话已成功处理（playTaskpoint / processNonVideoTaskpoint 返回 true）
        的任务点集合。使用 name|path 作为键，兼容 scanItems 中出现的同名项
        （重复扫描或缓存与 DOM 不一致可能导致）。
        作用：
-         1) 自动重试递归时跳过本轮已完成项，避免重复播放同一视频；
-         2) 防止 DOM 未同步造成的"完成 → rescan 改回未完成 → 再播放"死循环。
-       每次 startRecursive 开始时清空。 */
+         1) 自动重试时跳过本轮已完成项，避免重复播放同一视频；
+         2) 防止 DOM 未同步造成的"完成 → rescan 改回未完成 → 再播放"死循环。 */
     let _sessionOkItems = new Set();
-    function _okKey(it) {
-        if (!it) return "";
-        var nm = it.name || "";
-        var p = "";
-        try { p = Array.isArray(it.path) ? it.path.join("/") : ""; } catch (e) {}
-        /* 【v0.12.21 修复】同一小节内的视频/测验 name 与 path 可能完全相同
-           （name 被 GENERIC_NAME_WORDS 退化为小节名），必须再区分 type、_ri、isVideo，
-           否则视频处理完后会把同小节的测验误判为"已处理"而跳过。 */
-        var ri = (typeof it._ri === "number") ? it._ri : -1;
-        var tp = it.type || "";
-        var vid = it.isVideo ? "V" : "N";
-        return vid + "|" + tp + "|" + nm + "|" + p + "|" + ri;
-    }
-
-    let scanItems = [];
+    /* 本次调度会话中已放弃（多次重试仍未完成）的任务点，避免无限重试同一项 */
+    let _gaveUpItems = new Set();
+     let scanItems = [];
     let lastDoneVideoIdx = -1;
     let _curCi = -1, _curSi = -1;
 
     let challengeMode = false;
     let challengeBlockPoint = null;
-    let autoScanTimer = null;
     let autoScanEnabled = true;
-    let autoScanInProgress = false;
-    let _lastChallengeKey = null;
-    let _recursiveSessionActive = false;
 
     let recordQuizRunning = false;
+     /* ============================================================
+     * 【调度器状态机】—— 单一事件源，统一课程调度
+     *   相位：idle | scanning | processing | waiting_lock | done | paused
+     *   running 仅在 processing 相位为 true（scanning 由 scanCourse 自行置位）；
+     *   定时器只在 waiting_lock 相位运行（定期探测断点后是否解锁）。
+     * ============================================================ */
+    
+/* ============================================================
+ * UOOC 调度层 v3（模块化，由 merge_uooc.py 注入）
+ * 依赖既有：scanItems/challengeMode/challengeBlockPoint/autoScanEnabled/running/scanning/
+ * stopRequested/_sessionOkItems/_gaveUpItems/UI/sleep/scanCourse/findSectionByPath/
+ * playTaskpoint/processNonVideoTaskpoint/focusTaskpoint/rescanCurrentSection/
+ * syncTaskProgress/scheduleSave/getSettings/_getSubmitMode/getCourseId/getCourseName
+ * 扩展点：TaskHandlers.register(type, handler)
+ * ============================================================ */
+const SCAN_CACHE_VERSION = "3.0";
 
-    let _autoScanSuspended = false;
-    let _autoScanWasEnabledBeforeSuspend = true;
+function makeItemKey(it) {
+    if (!it) return "";
+    if (it.isChallengeMarker) return "MARKER";
+    /* 用“路径 + 类型 + 序号”作为稳定身份，不再依赖 DOM 下标 _ri。
+       _ri 只用于定位 DOM，重扫/展开导致下标漂移时不会串项。 */
+    const p = Array.isArray(it.path) ? it.path.map(s => String(s || "").trim()).join("/") : "";
+    const seq = (typeof it.seq === "number" && it.seq > 0) ? it.seq : it._ri;
+    return `${p}|${it.type || ""}|${it.isVideo ? "V" : "N"}|${seq}`;
+}
+
+/* item 级状态（会话内有效）：
+   pending / retry / blocked / done
+   用于替代“成功/放弃/回滚次数”三套并行语义，至少让失败原因可追踪。 */
+function _setItemState(it, status, extra) {
+    if (!it) return;
+    it._status = status;
+    if (status === "retry") {
+        it._attempts = (it._attempts || 0) + 1;
+        it._lastError = (extra && extra.error) || it._lastError || "";
+        it._nextRetryAt = Date.now() + Math.min(60000, 3000 * it._attempts);
+    } else if (status === "blocked") {
+        it._blockedReason = (extra && extra.reason) || it._blockedReason || "unknown";
+    } else if (status === "done") {
+        it._attempts = 0;
+        it._lastError = "";
+        it._nextRetryAt = 0;
+        it._blockedReason = "";
+    }
+}
+function _sectionKeyOf(it) {
+    const p = Array.isArray(it.path) ? it.path.slice(0, -1) : [];
+    return p.map(s => String(s || "").trim()).join("/");
+}
+function assignSeqV3(items) {
+    const counters = new Map();
+    for (const it of items) {
+        if (!it || it.isChallengeMarker) { if (it) it.seq = 0; continue; }
+        const key = _sectionKeyOf(it) + "||" + (it.type || "");
+        const n = (counters.get(key) || 0) + 1;
+        counters.set(key, n); it.seq = n;
+    }
+    return items;
+}
+function makeSeqKey(it) {
+    return `${_sectionKeyOf(it)}|${it.type || ""}|${typeof it.seq === "number" ? it.seq : -1}`;
+}
+function parseScanTextV3(text) {
+    const lines = String(text || "").split("\n");
+    const items = [], errors = [];
+    for (const raw of lines) {
+        const line = raw.replace(/\r/g, "").trimEnd();
+        if (!line.trim()) continue;
+        const mm = line.match(/^\[(.+?)(?:\s+(.+?))?\]$/);
+        if (mm) {
+            items.push({ isChallengeMarker: true, name: mm[1], type: "限制标记",
+                isVideo: false, isTaskpoint: false, complete: false,
+                path: mm[2] ? mm[2].split("/").map(s => s.trim()).filter(Boolean) : [],
+                _ci: -1, _si: -1, _ri: -1, seq: 0 });
+            continue;
+        }
+        const m = line.match(/^([YyNn])\s+(\S+)\s+(.+)$/);
+        if (!m) { errors.push(line); continue; }
+        const tm = m[2].match(/^(.+?)#(\d+)$/);
+        const type = tm ? tm[1] : m[2];
+        const seq = tm ? parseInt(tm[2], 10) : null;
+        const path = m[3].split("/").map(s => s.trim()).filter(Boolean);
+        if (!path.length) { errors.push(line); continue; }
+        items.push({ isChallengeMarker: false, name: path[path.length - 1], type,
+            isVideo: type === "视频", isTaskpoint: true,
+            complete: m[1].toUpperCase() === "Y", path, _ci: -1, _si: -1, _ri: -1, seq });
+    }
+    return { items, errors };
+}
+function mergeScanItemsBySeq(parsedItems, oldItems, ctx) {
+    const oldList = (oldItems || []).filter(it => it && !it.isChallengeMarker);
+    assignSeqV3(oldList);
+    const buckets = new Map();
+    for (const it of oldList) {
+        const k = makeSeqKey(it);
+        if (!buckets.has(k)) buckets.set(k, []);
+        buckets.get(k).push(it);
+    }
+    const out = [], used = new Set(), added = [];
+    for (const nit of parsedItems) {
+        if (nit.isChallengeMarker) { out.push(nit); continue; }
+        const bucket = buckets.get(makeSeqKey(nit));
+        const matched = bucket && bucket.length ? bucket.shift() : null;
+        if (matched) {
+            used.add(matched);
+            nit._ci = matched._ci; nit._si = matched._si; nit._ri = matched._ri; nit.el = matched.el || null;
+        } else {
+            nit._ri = (ctx && typeof ctx.resolveRid === "function") ? ctx.resolveRid(nit.path, nit.type, nit.seq) : -1;
+            added.push(nit);
+        }
+        out.push(nit);
+    }
+    return { items: out, removed: oldList.filter(it => !used.has(it)), added };
+}
+
+function migrateScanCacheV2toV3(old) {
+    const src = (old && Array.isArray(old.scanItems)) ? old.scanItems : [];
+    const items = src.map(it => Object.assign({}, it, { seq: it.isChallengeMarker ? 0 : it.seq }));
+    assignSeqV3(items);
+    return {
+        version: SCAN_CACHE_VERSION,
+        courseId: (old && old.courseId) || (typeof getCourseId === "function" ? getCourseId() : ""),
+        courseName: (old && old.courseName) || (typeof getCourseName === "function" ? getCourseName() : ""),
+        timestamp: (old && old.timestamp) || Date.now(),
+        challengeMode: !!(old && old.challengeMode),
+        challengeBlockPoint: (old && old.challengeBlockPoint) || null,
+        autoScanEnabled: !(old && old.autoScanEnabled === false),
+        chapterScanStatus: (old && old.chapterScanStatus) || [],
+        scanItems: items.map(it => it.isChallengeMarker ? it : ({
+            name: it.name, type: it.type, isVideo: !!it.isVideo,
+            isTaskpoint: it.isTaskpoint !== false, complete: !!it.complete,
+            path: it.path, _ci: it._ci, _si: it._si, _ri: it._ri, seq: it.seq
+        }))
+    };
+}
+function classifyScanCacheVersion(v) {
+    const s = String(v || "");
+    if (s.startsWith(SCAN_CACHE_VERSION)) return "current";
+    if (s.startsWith("2.6")) return "migrate";
+    return "drop";
+}
+
+const TaskHandlers = (() => {
+    const map = new Map();
+    return {
+        register(type, handler) { map.set(type, handler); },
+        forItem(item) {
+            if (!item) return null;
+            if (item.isVideo) return map.get("#video") || null;
+            return map.get(item.type) || map.get("#default") || null;
+        }
+    };
+})();
+TaskHandlers.register("#video", { async process(item) { return await playTaskpoint(item); } });
+TaskHandlers.register("测验", { async process(item) { return await processNonVideoTaskpoint(item); } });
+TaskHandlers.register("#default", {
+    async process(item) {
+        const el = await focusTaskpoint(item);
+        if (!el) return false;
+        try { el.click(); } catch (e) {}
+        await new Promise(r => setTimeout(r, 1200));
+        try { await rescanCurrentSection(item); } catch (e) {}
+        return item.complete === true;
+    }
+});
+
+function schedulerMutex() {
+    const scanningNow = !!scanning;
+    const processing = Scheduler.phase === "processing";
+    const verifying = Scheduler.phase === "verifying";
+    const waitingLock = Scheduler.phase === "waiting_lock";
+    const recording = !!recordQuizRunning;
+    const quizRunning = !!(UI.isQuizButtonRunning && UI.isQuizButtonRunning());
+    return { scanning: scanningNow, processing, verifying, waitingLock, recording, quizRunning,
+        any: scanningNow || processing || verifying || recording || quizRunning };
+}
+function getMutexState() { return schedulerMutex(); }
+
+
+function _isProcessable(it) {
+    if (!it || it.isChallengeMarker || !it.isTaskpoint) return false;
+    if (it.complete) return false;
+    if (it._status === "blocked") return false;
+    if (_sessionOkItems.has(makeItemKey(it))) return false;
+    if (_gaveUpItems.has(makeItemKey(it))) return false;
+    if (_getSubmitMode() !== "auto" && !it.isVideo && it.type === "测验") return false;
+    return true;
+}
+
+/* 核实专用谓词：处理阶段跳过的项（sessionOk/gaveUp）在这里仍然可见。
+   这样“处理失败 → 核实也看不见 → 误判全部完成/仍锁定”的链路被切断。 */
+function _isOutstanding(it) {
+    return !!it && !it.isChallengeMarker && it.isTaskpoint && !it.complete;
+}
+
+const Verifier = {
+    _lastDone() {
+        let idx = -1;
+        for (let i = 0; i < scanItems.length; i++) {
+            const it = scanItems[i];
+            if (it.isChallengeMarker) break;
+            if (it.complete) idx = i;
+        }
+        return idx >= 0 ? scanItems[idx] : null;
+    },
+    _lastDoneOverall() {
+        let idx = -1;
+        for (let i = 0; i < scanItems.length; i++) {
+            const it = scanItems[i];
+            if (it.isChallengeMarker) continue;
+            if (it.complete) idx = i;
+        }
+        return idx >= 0 ? scanItems[idx] : null;
+    },
+    _pendingBeforeMarker() {
+        const mi = scanItems.findIndex(it => it.isChallengeMarker);
+        const limit = mi >= 0 ? mi : scanItems.length;
+        for (let i = 0; i < limit; i++) if (_isProcessable(scanItems[i])) return scanItems[i];
+        return null;
+    },
+    _pendingAll() {
+        return scanItems.find(it => _isOutstanding(it)) || null;
+    },
+    async level1() {
+        const last = this._lastDone();
+        if (!last) return { ran: false, checked: 0, changed: false, reason: "no-last-done" };
+        const found = await findSectionByPath(last.path);
+        if (!found || !found.sectionLi) return { ran: false, checked: 0, changed: false, reason: "section-not-found" };
+        const rl = found.sectionLi.querySelector(":scope > .resourcelist");
+        const els = rl ? Array.from(rl.querySelectorAll(":scope > .basic")) : [];
+        let changed = false, checked = 0;
+        for (const it of scanItems) {
+            if (it.isChallengeMarker || !it.complete) continue;
+            if (_gaveUpItems.has(makeItemKey(it))) continue;
+            if (it._ci !== last._ci || it._si !== last._si || it._ri < 0) continue;
+            checked++;
+            const el = els[it._ri];
+            if (el && !el.classList.contains("complete")) {
+                it.complete = false; changed = true;
+                try { _sessionOkItems.delete(makeItemKey(it)); } catch (e) {}
+                it._rollbackCount = (it._rollbackCount || 0) + 1;
+                if (it._rollbackCount >= 3) {
+                    try { _gaveUpItems.add(makeItemKey(it)); } catch (e) {}
+                    _setItemState(it, "blocked", { reason: "rollback-3" });
+                }
+            }
+        }
+        if (changed) { try { UI.setScanResultText(scanItemsToText(scanItems)); } catch (e) {} }
+        return { ran: true, checked, changed, reason: changed ? "y2n" : "ok" };
+    },
+    async _rescanAndCheck(ci, si) {
+        const saved = running; running = false;
+        try { await scanCourse(ci, si, false); } finally { running = saved; }
+        for (const it of scanItems) {
+            if (!it || it.isChallengeMarker || it.complete) continue;
+            const k = makeItemKey(it);
+            if (_sessionOkItems.has(k)) {
+                _sessionOkItems.delete(k);
+                it._rollbackCount = (it._rollbackCount || 0) + 1;
+            }
+            if (_gaveUpItems.has(k) && (it._rollbackCount || 0) < 3 && it._status !== "blocked") {
+                _gaveUpItems.delete(k);
+                if (it._status !== "done") it._status = "retry";
+            }
+            if ((it._rollbackCount || 0) >= 3) {
+                _gaveUpItems.add(k);
+                _setItemState(it, "blocked", { reason: "rollback-3" });
+            }
+        }
+        return !!this._pendingBeforeMarker();
+    },
+    async level2() {
+        const last = this._lastDoneOverall();
+        return last ? await this._rescanAndCheck(last._ci >= 0 ? last._ci : 0, 0) : false;
+    },
+    async level3() { return await this._rescanAndCheck(0, 0); }
+};
+
+const AutoSync = {
+    _running: false,
+    _timer: null,
+    _busy: false,
+    _pauseLogged: false,
+    _ms() { return Math.max(3000, (Number(getSettings().autoScanInterval) || 15) * 1000); },
+    _row() {
+        let r = document.getElementById("uooc-auto-scan-row");
+        if (r) return r;
+        const spans = document.querySelectorAll("#uooc-helper-panel span");
+        for (const s of spans) if (/自动更新完成状态/.test(s.textContent || "")) return s.closest("div");
+        return null;
+    },
+    _setHidden(v) { const r = this._row(); if (r) r.style.display = v ? "none" : ""; },
+    _schedule(delay) {
+        if (this._timer) { clearTimeout(this._timer); this._timer = null; }
+        if (!this._running) return;
+        this._timer = setTimeout(async () => {
+            this._timer = null;
+            try { await this.tick(); } catch (e) {}
+            if (this._running) this._schedule(this._ms());
+        }, delay);
+    },
+    start() {
+        if (this._running) return;
+        this._running = true;
+        this._pauseLogged = false;
+        try { UI.log("自动更新完成状态已开启", "info"); } catch (e) {}
+        this._schedule(this._ms());
+    },
+    stop(reason) {
+        const was = this._running;
+        this._running = false;
+        this._pauseLogged = false;
+        if (this._timer) { clearTimeout(this._timer); this._timer = null; }
+        try { UI.setAutoScanning(false); } catch (e) {}
+        if (was) { try { UI.log("自动更新完成状态已关闭" + (reason ? "（" + reason + "）" : ""), "info"); } catch (e) {} }
+    },
+    async tick() {
+        if (schedulerMutex().any || Scheduler.phase === "waiting_lock") {
+            this._setHidden(true);
+            try { UI.setAutoScanning(false); } catch (e) {}
+            if (!this._pauseLogged) {
+                this._pauseLogged = true;
+                try { UI.log("自动更新完成状态已暂停（其他任务进行中）", "info"); } catch (e) {}
+            }
+            return;
+        }
+        this._setHidden(false);
+        if (this._pauseLogged) {
+            this._pauseLogged = false;
+            try { UI.log("自动更新完成状态已恢复", "info"); } catch (e) {}
+        }
+        if (!autoScanEnabled) { this.stop("开关已关闭"); return; }
+        if (this._busy) return;
+        this._busy = true;
+
+        const pending = scanItems.filter(it => it && !it.isChallengeMarker && it.isTaskpoint && !it.complete && it._status !== "blocked");
+        if (!pending.length) { this._busy = false; try { UI.setAutoScanning(false); } catch (e) {} return; }
+
+        const t0 = Date.now();
+        try { UI.setAutoScanning(true); } catch (e) {}
+        try { UI.log(`🔁 自动更新完成状态：开始同步 ${pending.length} 个未完成任务点`, "debug"); } catch (e) {}
+
+        let changed = 0;
+        try {
+            const groups = new Map();
+            for (const it of pending) {
+                const secPath = (it.path || []).slice(0, -1);
+                if (!secPath.length) continue;
+                const key = secPath.join("/");
+                if (!groups.has(key)) groups.set(key, { path: secPath, items: [] });
+                groups.get(key).items.push(it);
+            }
+            for (const g of groups.values()) {
+                if (stopRequested) break;
+                let found = await findSectionByPath(g.path);
+                if (!found || !found.sectionLi) continue;
+                let sec = found.sectionLi;
+                let title = sec.querySelector(":scope > .basic") || sec;
+                if (!sec.querySelector(":scope > .resourcelist")) {
+                    try { if (!title.classList.contains("active")) title.click(); } catch (e) {}
+                    const dl = Date.now() + 4000;
+                    while (Date.now() < dl) {
+                        await sleep(200);
+                        if (stopRequested) break;
+                        if (!sec.isConnected) {
+                            const f2 = await findSectionByPath(g.path);
+                            if (!f2 || !f2.sectionLi) break;
+                            sec = f2.sectionLi; title = sec.querySelector(":scope > .basic") || sec;
+                            continue;
+                        }
+                        if (sec.querySelector(":scope > .resourcelist")) break;
+                        if (detectChallengeBlock(sec)) break;
+                    }
+                }
+                const rl = sec.querySelector(":scope > .resourcelist");
+                const resources = rl ? Array.from(rl.querySelectorAll(":scope > .basic")) : [];
+                for (const it of g.items) {
+                    let domEl = null;
+                    if (it._ri === -1) domEl = sec.querySelector(":scope > .basic");
+                    else if (it._ri >= 0 && it._ri < resources.length) domEl = resources[it._ri];
+                    if (!domEl) continue;
+                    if (domEl.classList.contains("complete") && it.complete !== true) {
+                        it.complete = true; changed++;
+                        try { UI.log(`自动更新：${it.name} 已完成（N→Y）`, "ok"); } catch (e) {}
+                    }
+                }
+            }
+            if (changed > 0) {
+                try { UI.setScanResultText(scanItemsToText(scanItems)); } catch (e) {}
+                try { refreshAfterScanItemsChanged(); } catch (e) {}
+                try { syncTaskProgress(); } catch (e) {}
+                try { scheduleSave(); } catch (e) {}
+                try { UI.log(`✅ 自动更新：本轮同步 ${changed} 个完成项`, "ok"); } catch (e) {}
+            } else {
+                try { UI.log("自动更新：本轮无新增完成项", "debug"); } catch (e) {}
+            }
+        } catch (e) {
+            try { UI.log("自动更新异常：" + (e && e.message ? e.message : e), "warn"); } catch (_) {}
+        } finally {
+            const elapsed = Date.now() - t0;
+            if (elapsed < 3000) await sleep(3000 - elapsed);
+            try { UI.setAutoScanning(false); } catch (e) {}
+            this._busy = false;
+        }
+    }
+};
+
+const Scheduler = {
+    phase: "idle", _stop: false, _driving: false, verifyLevel: 0, gateState: "unknown",
+    _startIdx: 0, _startMode: "A",
+    _computeStartIdx(mode) {
+        const n = scanItems.length;
+        if (!n) { this._startIdx = 0; return; }
+        if (mode === "B") {
+            let last = -1;
+            for (let i = 0; i < n; i++) { const it = scanItems[i]; if (!it || it.isChallengeMarker) continue; if (it.isVideo && it.complete) last = i; }
+            this._startIdx = last + 1;
+        } else {
+            let first = 0;
+            for (let i = 0; i < n; i++) { const it = scanItems[i]; if (!it || it.isChallengeMarker || !it.isTaskpoint) continue; if (!it.complete) { first = i; break; } }
+            this._startIdx = first;
+        }
+    },
+    _emit(p) {
+        this.phase = p; running = (p === "processing");
+        try { UI.setRunning(running); } catch (e) {}
+        try { UI.setAutoScanRunning(p === "waiting_lock"); } catch (e) {}
+    },
+    start(mode) {
+        if (["scanning", "processing", "verifying", "waiting_lock"].includes(this.phase)) { this.pause(); return; }
+        this._stop = false; stopRequested = false;
+        _sessionOkItems = new Set(); _gaveUpItems = new Set();
+        for (const it of scanItems) {
+            if (!it || it.isChallengeMarker) continue;
+            it._status = "pending";
+            it._attempts = 0;
+            it._lastError = "";
+            it._nextRetryAt = 0;
+            it._blockedReason = "";
+            it._rollbackCount = 0;
+        }
+        this.verifyLevel = 0;
+        this._startMode = mode || "A";
+        this._computeStartIdx(this._startMode);
+        this._emit(scanItems.length ? "processing" : "scanning");
+        this.drive();
+    },
+    pause() {
+        this._stop = true; stopRequested = true;
+        this.verifyLevel = 0;
+        try { UI.setAutoScanning(false); } catch (e) {}
+        if (this.phase !== "idle" && this.phase !== "done") this._emit("paused");
+    },
+    async drive() {
+        if (this._driving) return;
+        this._driving = true;
+        try { while (!["idle", "paused", "done"].includes(this.phase)) await this.step(); }
+        catch (e) { try { UI.log("调度异常：" + (e && e.message ? e.message : e), "err"); } catch (_) {} this.verifyLevel = 0; this._emit("paused"); }
+        finally {
+            this._driving = false; running = false;
+            try { UI.setRunning(false); } catch (e) {}
+            try { refreshAfterScanItemsChanged(); } catch (e) {}
+        }
+    },
+    async step() {
+        switch (this.phase) {
+            case "scanning": return await this._stepScan();
+            case "processing": return await this._stepProcess();
+            case "verifying": return await this._stepVerify();
+            case "waiting_lock": this._emit("paused"); return;
+            default: return;
+        }
+    },
+     async _stepScan() {
+        if (this._stop || stopRequested) { this._emit("paused"); return; }
+        stopRequested = false;
+        try { await scanCourse(0, 0, false); } catch (e) { try { UI.log("扫描异常：" + (e && e.message ? e.message : e), "err"); } catch (_) {} }
+        this._computeStartIdx(this._startMode);
+        if (this._stop || stopRequested) { this._emit("paused"); return; }
+        this._emit("processing");
+    },
+    _nextPending() {
+        for (let i = this._startIdx; i < scanItems.length; i++) if (_isProcessable(scanItems[i])) return scanItems[i];
+        return null;
+    },
+    async _stepProcess() {
+        if (this._stop || stopRequested) { this._emit("paused"); return; }
+        const item = this._nextPending();
+        if (!item) { this.verifyLevel = 0; this._emit("verifying"); return; }
+        const h = TaskHandlers.forItem(item);
+        if (!h) {
+            _gaveUpItems.add(makeItemKey(item));
+            _setItemState(item, "blocked", { reason: "no-handler" });
+            try { UI.log("⚠ 无可用处理器，已跳过：" + item.name, "warn"); } catch (e) {}
+            return;
+        }
+        let ok = false, _errText = "";
+        try { ok = await h.process(item); }
+        catch (e) {
+            ok = false;
+            _errText = (e && e.message) ? e.message : String(e);
+            try { UI.log("处理异常：" + _errText, "err"); } catch (_) {}
+        }
+        if (this._stop || stopRequested) { this._emit("paused"); return; }
+        if (ok) {
+            _setItemState(item, "done");
+            _sessionOkItems.add(makeItemKey(item)); item.complete = true;
+            try { UI.setScanResultText(scanItemsToText(scanItems)); } catch (e) {}
+            /* 测验提交成功后不要立即用目录 DOM 回写：平台目录有延迟，容易把 Y 改回 N。
+               只对非测验项做即时对账，且只允许 N→Y。 */
+            if (!item.isVideo && item.type !== "测验") {
+                try { await rescanCurrentSection(item, { keepComplete: true }); } catch (e) {}
+            }
+            try { syncTaskProgress(); } catch (e) {}
+            try { scheduleSave(); } catch (e) {}
+        } else {
+            _setItemState(item, "retry", { error: _errText });
+            item._rollbackCount = (item._rollbackCount || 0) + 1;
+            if ((item._attempts || 0) >= 3 || item._rollbackCount >= 3) {
+                _setItemState(item, "blocked", { reason: "retry-exhausted" });
+            }
+            _gaveUpItems.add(makeItemKey(item));
+            try { UI.log(`⚠ 处理未完成，已跳过（第 ${item._attempts || 1} 次）：${item.name}${_errText ? " - " + _errText : ""}`, "warn"); } catch (e) {}
+        }
+    },
+    async _stepVerify() {
+        if (this._stop || stopRequested) { this._emit("paused"); return; }
+        if (Verifier._pendingBeforeMarker()) { this._startIdx = 0; this.verifyLevel = 0; this._emit("processing"); return; }
+        /* 【修复】没有闯关标记 = 已全部完成，直接 done；避免无谓三层重扫与“仍锁定”误报 */
+        const _hasGate = scanItems.some(it => it && it.isChallengeMarker) || !!challengeBlockPoint;
+        if (!_hasGate) {
+            this.verifyLevel = 0;
+            try { UI.log("🏁 所有任务点已完成", "ok"); } catch (e) {}
+            this._emit("done");
+            return;
+        }
+        if (_getSubmitMode() === "manual") {
+            this.verifyLevel = 1;
+            const pending = await Verifier.level2();
+            this.verifyLevel = 0;
+            if (pending) { this._startIdx = 0; this._emit("processing"); return; }
+            this._emit("paused");
+            try { UI.log("ℹ 可自动完成项已全部完成；测验请切换到「自动提交」后重试。", "warn"); } catch (e) {}
+            return;
+        }
+        this.verifyLevel = (this.verifyLevel || 0) + 1;
+        let pending = false;
+        if (this.verifyLevel === 1) {
+            const _r1 = await Verifier.level1();
+            pending = !!(_r1 && _r1.changed);
+            try { UI.log(`L1 核实：ran=${!!(_r1 && _r1.ran)} checked=${(_r1 && _r1.checked) || 0} changed=${!!(_r1 && _r1.changed)} reason=${(_r1 && _r1.reason) || "-"}`, "debug"); } catch (e) {}
+        } else if (this.verifyLevel === 2) {
+            pending = await Verifier.level2();
+        } else if (this.verifyLevel === 3) {
+            pending = await Verifier.level3();
+        }
+        if (pending) { this._startIdx = 0; this.verifyLevel = 0; this._emit("processing"); return; }
+        if (this.verifyLevel >= 3) {
+            this.verifyLevel = 0;
+            const _out = Verifier._pendingAll();
+            const _blocked = scanItems.filter(it => it && it._status === "blocked").length;
+            try {
+                if (_out) {
+                    const _outIdx = scanItems.indexOf(_out);
+                    const _mi = scanItems.findIndex(it => it && it.isChallengeMarker);
+                    const _afterMarker = _mi >= 0 && _outIdx > _mi;
+                    const _reason = _out._status === "blocked" ? `，已阻塞：${_out._blockedReason || "unknown"}` : "";
+                    UI.log(_afterMarker
+                        ? `⚠ 断点后仍有未完成任务点（${_out.name}），可能受闯关模式限制，已暂停。${_blocked ? `已阻塞 ${_blocked} 项。` : ""}`
+                        : `⚠ 断点前仍有未完成任务点（${_out.name}${_reason}），已暂停。${_blocked ? `已阻塞 ${_blocked} 项。` : ""}`, "warn");
+                } else {
+                    UI.log("⚠ 断点前任务脚本认为已完成，但平台仍显示锁定。不再等待解锁；请检查是否有未提交任务，或点「重新扫描」。", "warn");
+                }
+            } catch (e) {}
+            this._emit("paused");
+            return;
+        }
+    },
+};
+function suspendAutoScanForMutex() { try { Scheduler.pause(); } catch (e) {} }
+function resumeAutoScanAfterMutex() { /* 相位驱动，无需动作 */ }
+
 
     /* ============================================================
      * 【互斥判定】
      * ============================================================ */
-    function getMutexState() {
-        const scanningOn = scanning;
-        const runningOn = running;
-        const recordOn = recordQuizRunning;
-        const quizOn = UI.isQuizButtonRunning && UI.isQuizButtonRunning();
-        return {
-            scanning: scanningOn,
-            running: runningOn,
-            recordQuizRunning: recordOn,
-            quizRunning: quizOn,
-            any: scanningOn || runningOn || recordOn || quizOn
-        };
-    }
+    /* removed by merge_uooc.py */
     UI._registerMutexCheck(getMutexState);
 
     /* ============================================================
@@ -6962,31 +7957,8 @@ textarea, pre, .report-body { flex: 1; background: #0d1117; color: #e6e6e6; bord
     /* ============================================================
      * 【自动更新挂起/恢复】
      * ============================================================ */
-    function suspendAutoScanForMutex() {
-        if (autoScanTimer) {
-            _autoScanSuspended = true;
-            _autoScanWasEnabledBeforeSuspend = autoScanEnabled;
-            stopAutoScanLoop();
-            UI.log("⏸ 因其他任务启动，自动更新已暂停", "info");
-        } else {
-            _autoScanSuspended = false;
-            _autoScanWasEnabledBeforeSuspend = autoScanEnabled;
-        }
-    }
-    function resumeAutoScanAfterMutex() {
-        const wasRunning = _autoScanSuspended;
-        const wasEnabled = _autoScanWasEnabledBeforeSuspend;
-        _autoScanSuspended = false;
-        _autoScanWasEnabledBeforeSuspend = autoScanEnabled;
-        if (!wasRunning) return;
-        if (!wasEnabled) return;
-        if (!autoScanEnabled) return;
-        if (!challengeMode) return;
-        if (running || scanning || recordQuizRunning) return;
-        if (UI.isQuizButtonRunning && UI.isQuizButtonRunning()) return;
-        startAutoScanLoop();
-        UI.log("▶ 自动更新已恢复", "info");
-    }
+    /* removed by merge_uooc.py */
+    /* removed by merge_uooc.py */
 
     /* ============================================================
      * 【扫描缓存】按课程 ID 区分
@@ -7021,20 +7993,44 @@ textarea, pre, .report-body { flex: 1; background: #0d1117; color: #e6e6e6; bord
         return STORAGE_PREFIX + id;
     }
     function serializeScanItemsForStorage(items) {
-        return items.map(it => {
-            const copy = {};
-            for (const k in it) { if (k === "el") continue; copy[k] = it[k]; }
-            return copy;
+        /* 只持久化扫描结果本身。_status/_attempts/_lastError/_nextRetryAt/
+           _blockedReason/_rollbackCount 属于会话内临时状态，绝不能写进缓存，
+           否则刷新后仍会被当成 blocked，永远不再处理。 */
+        return (items || []).map(it => {
+            if (!it) return it;
+            if (it.isChallengeMarker) {
+                return { isChallengeMarker: true, name: it.name || "", type: it.type || "", path: it.path || [] };
+            }
+            return {
+                name: it.name || "",
+                type: it.type || "",
+                isVideo: !!it.isVideo,
+                isTaskpoint: it.isTaskpoint !== false,
+                complete: !!it.complete,
+                path: it.path || [],
+                _ci: Number(it._ci) || 0,
+                _si: Number(it._si) || 0,
+                _ri: Number(it._ri) || 0,
+                seq: (typeof it.seq === "number" ? it.seq : 0)
+            };
         });
     }
 
     let _saveTimer = null;
     let _lastSavedHash = null;
     function computeScanHash() {
+        /* 断点位置变化也要纳入 hash，否则同会话中仅断点变化时不会保存 */
+        const _bp = challengeBlockPoint;
         return JSON.stringify({
             n: scanItems.length,
             c: scanItems.filter(it => it.complete).length,
             m: challengeMode ? 1 : 0,
+            bp: _bp ? [
+                Number(_bp.ci) || 0,
+                Number(_bp.si) || 0,
+                String(_bp.chapterName || ""),
+                String(_bp.sectionName || "")
+            ] : null,
             s: UI.getChapterStatuses().join(",")
         });
     }
@@ -7082,7 +8078,9 @@ textarea, pre, .report-body { flex: 1; background: #0d1117; color: #e6e6e6; bord
             const data = JSON.parse(raw);
             if (!data) return { error: "bad-json" };
             const v = String(data.version || "");
-            if (!v.startsWith(STORAGE_VERSION_PREFIX)) return { error: "version-mismatch", foundVersion: v };
+            const _kind = classifyScanCacheVersion(v);
+    if (_kind === "drop") return { error: "version-mismatch", foundVersion: v };
+    if (_kind === "migrate") { try { return { ok: true, data: migrateScanCacheV2toV3(data), migrated: true }; } catch (e) { return { error: "migrate-failed", message: e && e.message ? e.message : String(e) }; } }
             if (!Array.isArray(data.scanItems)) return { error: "bad-structure" };
             return { ok: true, data };
         } catch (e) { return { error: "exception", message: e && e.message ? e.message : String(e) }; }
@@ -7111,7 +8109,17 @@ textarea, pre, .report-body { flex: 1; background: #0d1117; color: #e6e6e6; bord
 
     function restoreFromCache(data) {
         if (!data) return null;
-        scanItems = data.scanItems || [];
+        scanItems = _dedupeScanItems(data.scanItems || []);
+        assignSeqV3(scanItems);
+        for (const it of scanItems) {
+            if (!it || it.isChallengeMarker) continue;
+            it._status = "pending";
+            it._attempts = 0;
+            it._lastError = "";
+            it._nextRetryAt = 0;
+            it._blockedReason = "";
+            it._rollbackCount = 0;
+        }
         challengeMode = !!data.challengeMode;
         challengeBlockPoint = data.challengeBlockPoint || null;
         autoScanEnabled = data.autoScanEnabled !== false;
@@ -7129,11 +8137,7 @@ textarea, pre, .report-body { flex: 1; background: #0d1117; color: #e6e6e6; bord
         UI.setAutoScanEnabled(autoScanEnabled);
         _lastSavedHash = computeScanHash();
 
-        if (challengeMode && autoScanEnabled) {
-            setTimeout(() => {
-                if (!running && !scanning && !autoScanTimer) startAutoScanLoop();
-            }, 1200);
-        }
+        /* 冷启动自动接管已移除 */
         const t = new Date(data.timestamp).toLocaleString("zh-CN", { hour12: false });
         return { timestamp: data.timestamp, formattedTime: t, courseName: data.courseName };
     }
@@ -7144,6 +8148,11 @@ textarea, pre, .report-body { flex: 1; background: #0d1117; color: #e6e6e6; bord
         if (scanItems.length > 0) { _cacheRestored = true; return true; }
         const res = loadScanCache();
         if (res.ok) {
+            const _realItems = (res.data.scanItems || []).filter(it => !it.isChallengeMarker);
+            if (_realItems.length === 0 && res.data.scanItems.length > 0) {
+                UI.log("📦 本地缓存无有效任务点（仅含闯关标记），已跳过恢复，请点击重新扫描", "warn");
+                return false;
+            }
             const info = restoreFromCache(res.data);
             if (info) {
                 _cacheRestored = true;
@@ -7257,10 +8266,29 @@ textarea, pre, .report-body { flex: 1; background: #0d1117; color: #e6e6e6; bord
                 const opt = quizOptions.children[idx];
                 if (opt) opt.click();
             }
-            const btn = quizLayer.querySelector("button");
-            if (btn) btn.click();
+            /* 先标记 answered 防 500ms 内重复触发，再延迟 250ms 等 Angular 解禁提交按钮 */
             quizLayer.classList.add("answered");
             lastQuizQuestion = quizQuestion;
+            const _pickSubmit = (root) => {
+                if (!root) return null;
+                for (const b of root.querySelectorAll("button, .btn, a.btn, div.btn")) {
+                    const t = (b.innerText || b.textContent || "").trim();
+                    if (/提交|确认|确定|交卷/.test(t)) return b;
+                }
+                return null;
+            };
+            setTimeout(() => {
+                try {
+                    const _submitBtn = _pickSubmit(quizLayer) || _pickSubmit(document);
+                    if (_submitBtn) {
+                        _submitBtn.click();
+                    } else {
+                        const _fallback = quizLayer.querySelector(".mpopup-bottom button") || quizLayer.querySelector("button");
+                        if (_fallback) _fallback.click();
+                        UI.log("自动答题：未找到「提交/确定」按钮，已尝试兜底点击", "warn");
+                    }
+                } catch (e) {}
+            }, 250);
             UI.log(`自动答题：${quizQuestion.slice(0, 30)} → ${quizAnswer.toString()}`, "ok");
         } catch (error) {
             UI.log("自动答题出错：" + (error && error.message ? error.message : error), "err");
@@ -7271,11 +8299,14 @@ textarea, pre, .report-body { flex: 1; background: #0d1117; color: #e6e6e6; bord
     /* ============================================================
      * 【扫描结果文本序列化】
      * ============================================================ */
-    function makeChallengeMarker() {
+    function makeChallengeMarker(path, ci, si) {
         return {
             isChallengeMarker: true, name: CHALLENGE_MARKER_NAME, type: "限制标记",
             isVideo: false, isTaskpoint: false, complete: false,
-            path: [], _ci: -1, _si: -1, _ri: -1
+            path: Array.isArray(path) ? path.slice() : [],
+            _ci: (typeof ci === "number") ? ci : -1,
+            _si: (typeof si === "number") ? si : -1,
+            _ri: -1
         };
     }
 
@@ -7298,7 +8329,12 @@ textarea, pre, .report-body { flex: 1; background: #0d1117; color: #e6e6e6; bord
         if (!items || !items.length) return "";
         const seqMap = computeSeqMap(items);
         return items.map((it, i) => {
-            if (it.isChallengeMarker) return `[${CHALLENGE_MARKER_NAME}]`;
+            if (it.isChallengeMarker) {
+                const p = (Array.isArray(it.path) && it.path.length > 0)
+                    ? " " + it.path.join("/")
+                    : "";
+                return `[${CHALLENGE_MARKER_NAME}${p}]`;
+            }
             const mark = it.complete ? "Y" : "N";
             const pathText = it.path.length ? it.path.join("/") : it.name;
             const seq = seqMap[i];
@@ -7312,12 +8348,17 @@ textarea, pre, .report-body { flex: 1; background: #0d1117; color: #e6e6e6; bord
         for (const raw of lines) {
             const line = raw.replace(/\r/g, "").trimEnd();
             if (!line.trim()) continue;
-            const markerMatch = line.match(/^\[(.+)\]$/);
+            const markerMatch = line.match(/^\[(.+?)(?:\s+(.+?))?\]$/);
             if (markerMatch) {
+                const _mName = markerMatch[1];
+                const _mPathText = markerMatch[2] || "";
+                const _mPath = _mPathText
+                    ? _mPathText.split("/").map(s => s.trim()).filter(s => s.length)
+                    : [];
                 result.push({
-                    isChallengeMarker: true, name: markerMatch[1], type: "限制标记",
+                    isChallengeMarker: true, name: _mName, type: "限制标记",
                     isVideo: false, isTaskpoint: false, complete: false,
-                    path: [], _ci: -1, _si: -1, _ri: -1
+                    path: _mPath, _ci: -1, _si: -1, _ri: -1
                 });
                 continue;
             }
@@ -7339,6 +8380,18 @@ textarea, pre, .report-body { flex: 1; background: #0d1117; color: #e6e6e6; bord
     }
 
     function mergeIndexes(newItems, oldItems) {
+        const oldMarker = oldItems.find(it => it.isChallengeMarker);
+        for (const it of newItems) {
+            if (!it.isChallengeMarker) continue;
+            if ((!it.path || it.path.length === 0) && oldMarker && oldMarker.path && oldMarker.path.length > 0) {
+                it.path = oldMarker.path.slice();
+            }
+            if (oldMarker && oldMarker.path && it.path
+                && oldMarker.path.join("/") === it.path.join("/")) {
+                it._ci = oldMarker._ci;
+                it._si = oldMarker._si;
+            }
+        }
         const oldMap = new Map();
         for (const it of oldItems) {
             if (it.isChallengeMarker) continue;
@@ -7357,6 +8410,38 @@ textarea, pre, .report-body { flex: 1; background: #0d1117; color: #e6e6e6; bord
             }
         }
         return newItems;
+    }
+
+    function _dedupeScanItems(items) {
+        if (!Array.isArray(items)) return items;
+        const seen = new Map();
+        const out = [];
+        for (const it of items) {
+            if (!it) continue;
+            if (it.isChallengeMarker) { out.push(it); continue; }
+            const key = (Array.isArray(it.path) ? it.path.join("/") : "") + "|" + (it.type || "") + "|" + (typeof it._ri === "number" ? it._ri : -1);
+            const prev = seen.get(key);
+            if (!prev) {
+                seen.set(key, it);
+                out.push(it);
+            } else {
+                const prevComplete = prev.complete === true;
+                const curComplete = it.complete === true;
+                let preferCur = false;
+                if (curComplete && !prevComplete) preferCur = true;
+                else if (curComplete === prevComplete) {
+                    const prevSiOk = typeof prev._si === "number" && prev._si >= 0;
+                    const curSiOk = typeof it._si === "number" && it._si >= 0;
+                    if (curSiOk && !prevSiOk) preferCur = true;
+                }
+                if (preferCur) {
+                    const idx = out.indexOf(prev);
+                    if (idx >= 0) out[idx] = it;
+                    seen.set(key, it);
+                }
+            }
+        }
+        return out;
     }
 
     function findMarkerIdx() { return scanItems.findIndex(it => it.isChallengeMarker); }
@@ -7416,9 +8501,6 @@ textarea, pre, .report-body { flex: 1; background: #0d1117; color: #e6e6e6; bord
             lastDoneDisplay = `[${seq} ${item.path.join("/")}]`;
         }
 
-        const targets = realItems.filter((it, i) => i < lastDoneVideoIdx && !it.complete);
-        const targetVideos = targets.filter(it => it.isVideo).length;
-        const firstMissingVideoBefore = realItems.findIndex((it, i) => i < lastDoneVideoIdx && it.isVideo && !it.complete);
         const _autoNow2 = (function () {
             try {
                 if (typeof _getSubmitMode === "function") return _getSubmitMode() === "auto";
@@ -7431,24 +8513,17 @@ textarea, pre, .report-body { flex: 1; background: #0d1117; color: #e6e6e6; bord
                 if (realItems[i].isTaskpoint && realItems[i].complete) { _effectiveLastDoneIdx = i; break; }
             }
         }
-        const optAEnabled = _autoNow2
-            ? (realItems.findIndex((it, i) => i < _effectiveLastDoneIdx && it.isTaskpoint && !it.complete) !== -1)
-            : (firstMissingVideoBefore !== -1);
-        let optBEnabled;
-        if (_autoNow2) {
-            optBEnabled = false;
-            const _markerLimit = hasMarker ? markerIdx : realItems.length;
-            for (let i = _effectiveLastDoneIdx + 1; i < _markerLimit; i++) {
-                const it = realItems[i];
-                if (it.isChallengeMarker) continue;
-                if (!it.isTaskpoint) continue;
-                if (it.complete) continue;
-                optBEnabled = true;
-                break;
-            }
-        } else {
-            optBEnabled = realItems.some(it => !it.complete);
-        }
+        const _breakpointIdx = _autoNow2 ? _effectiveLastDoneIdx : lastDoneVideoIdx;
+        const _pendingBefore = _autoNow2
+            ? realItems.filter((it, i) => i < _breakpointIdx && it.isTaskpoint && !it.complete)
+            : realItems.filter((it, i) => i < _breakpointIdx && it.isVideo && !it.complete);
+        const _pendingAfter = realItems.filter((it, i) => i > _breakpointIdx && it.isTaskpoint && !it.complete);
+        const targets = _pendingBefore.concat(_pendingAfter);
+        const targetVideos = targets.filter(it => it.isVideo).length;
+        const optAEnabled = _pendingBefore.length > 0;
+        const optBEnabled = _autoNow2
+            ? _pendingAfter.length > 0
+            : realItems.some(it => !it.complete);
 
         /* auto 模式下脚本会处理非视频任务点，"全部完成 / 未被限制任务点已完成"
            的判断应基于所有任务点，而不是仅基于视频任务点。
@@ -7490,17 +8565,32 @@ textarea, pre, .report-body { flex: 1; background: #0d1117; color: #e6e6e6; bord
         const autoSubmit = _getSubmitMode() === "auto";
         infoHTML += `最后一个已完成${autoSubmit ? "任务点" : "视频"}：<b style="color:#ffa726;">${esc(lastDoneDisplay)}</b><br>`;
 
+        const _bpName = _autoNow2 ? "任务点" : "视频任务点";
+        const _manualHasNonVideoPending = !_autoNow2 && _pendingAfter.some(it => !it.isVideo);
         if (targets.length === 0) {
-            infoHTML += `<span style="color:#66bb6a;">断点之前未完成任务点：0 个，其中未完成${autoSubmit ? "任务点" : "视频任务点"}：0 个</span>`;
+            infoHTML += `<span style="color:#66bb6a;">断点前空缺：0 个；断点后待完成：0 个</span>`;
         } else {
-            infoHTML += `断点之前未完成任务点：<b style="color:#ffa726;">${targets.length}</b> 个，`;
-            infoHTML += `其中未完成${autoSubmit ? "任务点" : "视频任务点"}：<b style="color:#ef5350;">${targetVideos}</b> 个`;
+            infoHTML += `断点前空缺：<b style="color:#ffa726;">${_pendingBefore.length}</b> 个；`;
+            infoHTML += `断点后待完成：<b style="color:#66bb6a;">${_pendingAfter.length}</b> 个`;
+            if (_manualHasNonVideoPending) {
+                infoHTML += `<br><span style="color:#90a4ae;font-size:10px;">ℹ 当前为手动提交，递归不会处理测验；要处理这些测验请切到「自动提交」</span>`;
+            }
             infoHTML += `<div style="margin-top:6px;max-height:110px;overflow-y:auto;background:#101418;padding:5px 7px;border-radius:4px;font-size:10.5px;line-height:1.55;">`;
-            for (const it of targets) {
+            for (const it of _pendingBefore) {
                 const icon = it.isVideo ? "🎬" : (it.type === "测验" ? "📝" : "📌");
                 infoHTML += `<div style="color:#e6e6e6;word-break:break-all;">
                     <span style="color:#ffa726;">${icon}</span>
                     <span style="color:#90a4ae;">[${esc(it.type)}]</span>
+                    <span style="color:#ffa726;font-size:10px;margin:0 4px;">[待补]</span>
+                    <span>${esc(it.path.join("/"))}</span>
+                </div>`;
+            }
+            for (const it of _pendingAfter) {
+                const icon = it.isVideo ? "🎬" : (it.type === "测验" ? "📝" : "📌");
+                infoHTML += `<div style="color:#e6e6e6;word-break:break-all;">
+                    <span style="color:#ffa726;">${icon}</span>
+                    <span style="color:#90a4ae;">[${esc(it.type)}]</span>
+                    <span style="color:#66bb6a;font-size:10px;margin:0 4px;">[待续]</span>
                     <span>${esc(it.path.join("/"))}</span>
                 </div>`;
             }
@@ -7527,7 +8617,8 @@ textarea, pre, .report-body { flex: 1; background: #0d1117; color: #e6e6e6; bord
     function chapterNameOf(titleEl) {
         if (!titleEl) return "";
         const oneline = titleEl.querySelector(".oneline");
-        const t = (oneline || titleEl).innerText || (oneline || titleEl).textContent || "";
+        let t = (oneline || titleEl).innerText || (oneline || titleEl).textContent || "";
+        t = t.replace(/[\u00A0\u3000]/g, " ");
         return t.trim().replace(/\s+/g, " ").slice(0, 80);
     }
     function detectChallengeBlock(sectionLi) {
@@ -7535,6 +8626,26 @@ textarea, pre, .report-body { flex: 1; background: #0d1117; color: #e6e6e6; bord
         if (!unfoldInfo) return false;
         const text = unfoldInfo.textContent || unfoldInfo.innerText || "";
         return text.includes("闯关模式");
+    }
+
+    function getFlatSections(ul2) {
+        const sections = [];
+        function traverse(ul) {
+            for (const li of Array.from(ul.children)) {
+                if (!li.classList.contains("catalogItem") && !li.classList.contains("ng-scope") && li.tagName !== "LI") continue;
+                const hasRes = li.querySelector(":scope > .resourcelist");
+                const hasLock = li.querySelector(":scope > .unfoldInfo");
+                const subUl = li.querySelector(":scope > ul");
+                if (hasRes || hasLock || !subUl) {
+                    sections.push(li);
+                }
+                if (subUl) {
+                    traverse(subUl);
+                }
+            }
+        }
+        traverse(ul2);
+        return sections;
     }
 
     async function activateChapter(chapterLi, title) {
@@ -7555,15 +8666,34 @@ textarea, pre, .report-body { flex: 1; background: #0d1117; color: #e6e6e6; bord
     async function activateSection(sectionLi, title) {
         if (sectionLi.querySelector(":scope > .resourcelist")) return { activated: true, hasResources: true };
         for (let attempt = 0; attempt < 2; attempt++) {
+            if (!sectionLi.isConnected) return { activated: false, hasResources: false, gone: true };
             try { title.click(); } catch (e) {}
             const deadline = Date.now() + 8000;
+            let _sawChallenge = false;
+            let _challengeStart = 0;
             while (Date.now() < deadline) {
                 await sleep(200);
                 if (scanCancelFlag || stopRequested) return { activated: false, hasResources: false };
+                // 【修复】点击小节触发了 ui-sref 路由，sectionLi 可能已被 Angular 销毁；
+                // 引用一失效立即返回，避免后续查询全部为 null 而白等 8 秒。
+                if (!sectionLi.isConnected) return { activated: false, hasResources: false, gone: true };
                 if (sectionLi.querySelector(":scope > .resourcelist")) return { activated: true, hasResources: true };
-                if (detectChallengeBlock(sectionLi)) return { activated: true, hasResources: false, challenge: true };
+                if (detectChallengeBlock(sectionLi)) {
+                    if (!_sawChallenge) { _sawChallenge = true; _challengeStart = Date.now(); }
+                    if (Date.now() - _challengeStart > 2000) return { activated: true, hasResources: false, challenge: true };
+                    continue;
+                }
+                if (sectionLi.querySelector(":scope > ul")) return { activated: true, hasResources: false };
             }
-            if (attempt === 0) await sleep(300);
+            if (_sawChallenge) return { activated: true, hasResources: false, challenge: true };
+            if (attempt === 0) {
+                await sleep(300);
+                const _parentChapter = sectionLi.isConnected ? sectionLi.closest("li.catalogItem") : null;
+                if (_parentChapter) {
+                    const _pt = _parentChapter.querySelector(":scope > .basic.chapter") || _parentChapter.querySelector(":scope > .basic");
+                    if (_pt) { try { _pt.click(); } catch (e) {} await sleep(500); }
+                }
+            }
         }
         return { activated: false, hasResources: false };
     }
@@ -7615,9 +8745,22 @@ textarea, pre, .report-body { flex: 1; background: #0d1117; color: #e6e6e6; bord
             return { challengeDetected: false };
         }
 
+        if (fromCi === 0 && fromSi === 0) {
+            const _firstChapterLi = root.children[0];
+            if (_firstChapterLi) {
+                const _ft = _firstChapterLi.querySelector(":scope > .basic.chapter") || _firstChapterLi.querySelector(":scope > .basic");
+                if (_ft) {
+                    try { _ft.click(); } catch (e) {}
+                    await sleep(600);
+                }
+            }
+        }
+
         scanning = true;
         scanCancelFlag = false;
-        stopRequested = false;
+        if (fromCi === 0 && fromSi === 0) {
+            stopRequested = false;
+        }
         UI.setScanning(true);
         UI.setChapterErrorLine("");
         UI.log(`🔍 开始顺序扫描课程目录（从第 ${fromCi + 1} 章）…`, "run");
@@ -7692,24 +8835,68 @@ textarea, pre, .report-body { flex: 1; background: #0d1117; color: #e6e6e6; bord
 
                         const secResult = await activateSection(sectionLi, sectionTitle);
 
+                        const subUl = sectionLi.querySelector(":scope > ul");
+                        if (subUl && subUl.children.length > 0) {
+                            const subLIs = Array.from(subUl.children);
+                            for (let k = subLIs.length - 1; k >= 0; k--) {
+                                sectionLIs.splice(si + 1, 0, subLIs[k]);
+                            }
+                        }
+
                         if (secResult.challenge || detectChallengeBlock(sectionLi)) {
                             UI.log(`🛑 检测到闯关模式拦截：${sectionName}`, "warn");
                             challengeDetected = true;
                             challengeAt = { ci, si, chapterName, sectionName };
+                            items.push(makeChallengeMarker([chapterName, sectionName], ci, si));
+                            scanCancelFlag = true;
+                            UI.log(`   停止全局扫描`, "info");
                             break;
                         }
 
                         if (!secResult.activated) {
-                            UI.log(`    ⚠ ${sectionName.slice(0, 30)} 激活失败（超时），跳过该小节`, "warn");
-                            failedSections++; chapterHasError = true;
-                            if (/测验|测试|考试/.test(sectionName)) {
-                                items.push({
-                                    el: sectionTitle, name: sectionName, type: "测验",
-                                    isVideo: false, isTaskpoint: true,
-                                    complete: sectionTitle.classList.contains("complete"),
-                                    path, _ci: ci, _si: si, _ri: -1
-                                });
+                            if (secResult.gone) {
+                                // 【修复】点击小节触发 ui-sref 路由后，Angular 会重建 chapterList 并把章节 3 重新折叠，
+                                // 导致 sectionLIs 里所有 li 引用失效。这里重新点开章节、重新读取 rank-2，
+                                // 并从同名小节处继续，避免整章所有小节都白等 17 秒。
+                                UI.log(`    ↩ ${sectionName.slice(0, 30)} DOM 引用失效（Angular 重渲染），重新展开章节…`, "warn");
+                                try { chapterTitle.click(); } catch (e) {}
+                                let _reopened = false;
+                                const _reDl = Date.now() + 6000;
+                                while (Date.now() < _reDl) {
+                                    await sleep(200);
+                                    if (scanCancelFlag || stopRequested) break;
+                                    if (chapterLi.querySelector(":scope > ul.rank-2")) { _reopened = true; break; }
+                                }
+                                if (_reopened) {
+                                    const _ul2b = chapterLi.querySelector(":scope > ul.rank-2");
+                                    const _newSecs = _ul2b ? Array.from(_ul2b.children) : [];
+                                    const _newIdx = _newSecs.findIndex(_li => {
+                                        const _t = _li.querySelector(":scope > .basic");
+                                        return _t && chapterNameOf(_t) === sectionName;
+                                    });
+                                    if (_newIdx >= 0) {
+                                        sectionLIs.length = 0;
+                                        for (const _li of _newSecs) sectionLIs.push(_li);
+                                        si = _newIdx - 1; // for 循环会 si++，下一轮即从该小节重试
+                                        continue;
+                                    }
+                                }
+                                UI.log(`    ⚠ ${sectionName.slice(0, 30)} 章节重新展开失败，跳过`, "warn");
+                                continue;
                             }
+                            UI.log(`    ⚠ ${sectionName.slice(0, 30)} 激活失败（超时），已加入待验证队列`, "warn");
+                            failedSections++; chapterHasError = true;
+                            let _guessType = "其他";
+                            if (/测验|测试|考试|答题/.test(sectionName)) _guessType = "测验";
+                            else if (/讨论/.test(sectionName)) _guessType = "讨论";
+                            else if (/作业/.test(sectionName)) _guessType = "作业";
+                            else if (/文档|阅读|资料/.test(sectionName)) _guessType = "文档";
+                            items.push({
+                                el: sectionTitle, name: sectionName, type: _guessType,
+                                isVideo: false, isTaskpoint: true,
+                                complete: sectionTitle.classList.contains("complete"),
+                                path, _ci: ci, _si: si, _ri: -1
+                            });
                             continue;
                         }
 
@@ -7753,7 +8940,8 @@ textarea, pre, .report-body { flex: 1; background: #0d1117; color: #e6e6e6; bord
             UI.log(`扫描异常：${e && e.message ? e.message : e}`, "err");
         }
 
-        scanItems = items;
+        scanItems = _dedupeScanItems(items);
+        assignSeqV3(scanItems);
         _curCi = -1; _curSi = -1;
         _cacheRestored = true;
 
@@ -7762,9 +8950,13 @@ textarea, pre, .report-body { flex: 1; background: #0d1117; color: #e6e6e6; bord
         if (challengeDetected) {
             challengeMode = true;
             challengeBlockPoint = challengeAt;
-            scanItems.push(makeChallengeMarker());
-            UI.log(`🛑 扫描已因闯关模式暂停：共 ${items.length} 个任务点（已保留），用时 ${elapsed}s`, "warn");
-            UI.log(`   闯关拦截点：${challengeAt.chapterName} / ${challengeAt.sectionName}`, "warn");
+            UI.log(`✅ 扫描完成，共 ${items.length} 个任务点，用时 ${elapsed}s`, "ok");
+            UI.log(`   最后拦截点：${challengeAt.chapterName} / ${challengeAt.sectionName}`, "warn");
+            let foundLock = false;
+            for(let k=0; k<chapterLIs.length; k++) {
+                if (foundLock) UI.markChapterStatus(k, "challengePending");
+                else if (UI.getChapterStatuses()[k] === "challenge") foundLock = true;
+            }
         } else {
             challengeMode = false;
             challengeBlockPoint = null;
@@ -7787,260 +8979,136 @@ textarea, pre, .report-body { flex: 1; background: #0d1117; color: #e6e6e6; bord
 
         saveScanCache();
 
-        if (challengeDetected && !running && autoStart) {
-            UI.log("🚀 检测到闯关，自动对已扫描部分开始递归…", "run");
-            setTimeout(() => { if (!running) startRecursive("A"); }, 600);
-        } else if (challengeDetected && !running && !autoStart) {
-            UI.log("ℹ 扫描已完成（自动更新触发）。如要处理新发现的任务点，请手动点击「开始递归」", "info");
-        }
         return { challengeDetected };
     }
 
     /* ============================================================
      * 【自动扫描循环】
      * ============================================================ */
-    function startAutoScanLoop() {
-        if (!autoScanEnabled) return;
-        if (autoScanTimer) return;
-        const intervalMs = Math.max(3, Number(getSettings().autoScanInterval) || 15) * 1000;
-        UI.log(`已启动自动更新完成状态检查（每 ${intervalMs / 1000} 秒一次）`, "info");
+    /* 自动扫描循环已由 Scheduler 的 waiting_lock 相位接管 */
 
-        setTimeout(() => {
-            if (autoScanInProgress) return;
-            if (!autoScanEnabled) return;
-            if (running || scanning) return;
-            autoScanBeforeMarker().catch(() => {});
-        }, 1500);
+    /* 自动扫描标记前检查已由 Scheduler 的 waiting_lock 相位接管 */
 
-        autoScanTimer = setInterval(async () => {
-            if (autoScanInProgress) return;
-            if (running || scanning) return;
-            await autoScanBeforeMarker();
-        }, intervalMs);
-    }
-    function stopAutoScanLoop() {
-        if (autoScanTimer) { clearInterval(autoScanTimer); autoScanTimer = null; }
-    }
-
-    async function autoScanBeforeMarker() {
-        if (autoScanInProgress) return;
-        if (!challengeMode) return;
-        if (running || scanning) return;
-
-        const markerIdx = findMarkerIdx();
-        if (markerIdx < 0) return;
-
-        const pending = [];
-        for (let i = 0; i < markerIdx; i++) {
-            const it = scanItems[i];
-            if (it.isChallengeMarker) continue;
-            if (!it.isTaskpoint) continue;
-            if (it.complete) continue;
-            pending.push(it);
-        }
-
-        if (pending.length === 0) {
-            const beforeMarker = scanItems.slice(0, markerIdx).filter(it => !it.isChallengeMarker);
-            const allDone = beforeMarker.length > 0 && beforeMarker.every(it => it.complete);
-            if (allDone) {
-                UI.log("🎉 闯关前所有任务点已完成！继续向后扫描…", "ok");
-                stopAutoScanLoop();
-                setTimeout(() => { continueScanAfterChallenge(); }, 1200);
+    async function rebuildChallengeBlockPointFromMarker(marker) {
+        if (!marker || !marker.path || marker.path.length < 2) return null;
+        const root = document.querySelector("ul.rank-1");
+        if (!root) return null;
+        const chapterName = marker.path[0];
+        const sectionName = marker.path[1];
+        const chapterLIs = Array.from(root.children).filter(el => el.classList.contains("catalogItem"));
+        for (let ci = 0; ci < chapterLIs.length; ci++) {
+            const chapterTitle = chapterLIs[ci].querySelector(":scope > .basic.chapter") || chapterLIs[ci].querySelector(":scope > .basic");
+            if (!chapterTitle) continue;
+            if (chapterNameOf(chapterTitle) !== chapterName) continue;
+            const ul2 = chapterLIs[ci].querySelector(":scope > ul.rank-2");
+            if (!ul2) {
+                return null;
             }
-            return;
-        }
-
-        autoScanInProgress = true;
-        UI.setAutoScanning(true);
-        UI.log(`自动更新完成状态：待检查 ${pending.length} 个未完成任务点`, "debug");
-
-        try {
-            for (const it of pending) {
-                if (it._ci < 0 || it._si < 0) {
-                    const found = await findSectionByPath(it.path);
-                    if (found) { it._ci = found.ci; it._si = found.si; }
+            const sectionLIs = Array.from(ul2.children);
+            for (let si = 0; si < sectionLIs.length; si++) {
+                const sectionTitle = sectionLIs[si].querySelector(":scope > .basic");
+                if (!sectionTitle) continue;
+                if (chapterNameOf(sectionTitle) === sectionName) {
+                    return { ci, si, chapterName, sectionName };
                 }
             }
-
-            const sectionMap = new Map();
-            for (const it of pending) {
-                if (it._ci < 0 || it._si < 0) continue;
-                const key = it._ci + "," + it._si;
-                if (!sectionMap.has(key)) sectionMap.set(key, { ci: it._ci, si: it._si, items: [] });
-                sectionMap.get(key).items.push(it);
-            }
-
-            let changed = 0;
-            const root = document.querySelector("ul.rank-1");
-
-            if (root) {
-                const chapterLIs = Array.from(root.children).filter(el => el.classList.contains("catalogItem"));
-                for (const { ci, si, items: pendingItems } of sectionMap.values()) {
-                    try {
-                        const chapterLi = chapterLIs[ci];
-                        if (!chapterLi) continue;
-                        const chapterTitle = chapterLi.querySelector(":scope > .basic.chapter") || chapterLi.querySelector(":scope > .basic");
-                        if (chapterTitle) await activateChapter(chapterLi, chapterTitle);
-                        const ul2 = chapterLi.querySelector(":scope > ul.rank-2");
-                        if (!ul2) continue;
-                        const sectionLi = ul2.children[si];
-                        if (!sectionLi) continue;
-                        const sectionTitle = sectionLi.querySelector(":scope > .basic");
-                        if (sectionTitle) await activateSection(sectionLi, sectionTitle);
-
-                        const rl = sectionLi.querySelector(":scope > .resourcelist");
-                        const resources = rl ? Array.from(rl.querySelectorAll(":scope > .basic")) : [];
-
-                        for (const it of pendingItems) {
-                            let domEl = null;
-                            if (it._ri === -1) domEl = sectionTitle;
-                            else if (it._ri >= 0 && it._ri < resources.length) domEl = resources[it._ri];
-                            else continue;
-                            if (!domEl) continue;
-                            const isComplete = domEl.classList.contains("complete");
-                            if (isComplete && it.complete !== true) {
-                                it.complete = true;
-                                changed++;
-                                UI.log(`自动更新：${it.name} 已完成（更新对应行）`, "ok");
-                            }
-                        }
-                    } catch (e) {
-                        UI.log(`自动更新 (${ci},${si}) 异常：${e && e.message ? e.message : e}`, "warn");
-                    }
-                }
-            }
-
-            if (changed > 0) {
-                UI.setScanResultText(scanItemsToText(scanItems));
-                refreshAfterScanItemsChanged();
-                UI.log(`自动更新：更新了 ${changed} 个任务点状态`, "ok");
-                scheduleSave();
-            }
-        } finally {
-            UI.setAutoScanning(false);
-            autoScanInProgress = false;
+            return { ci, si: 0, chapterName, sectionName };
         }
-
-        const idx = findMarkerIdx();
-        if (idx < 0) return;
-        const beforeMarker = scanItems.slice(0, idx).filter(it => !it.isChallengeMarker);
-        const allDone = beforeMarker.length > 0 && beforeMarker.every(it => it.complete);
-        if (allDone) {
-            UI.log("🎉 闯关前所有任务点已完成！继续向后扫描…", "ok");
-            stopAutoScanLoop();
-            setTimeout(() => { continueScanAfterChallenge(); }, 1200);
-        }
+        return null;
     }
 
-    async function continueScanAfterChallenge() {
-        if (!challengeBlockPoint) return;
-        if (running || scanning) return;
-        const prevKey = `${challengeBlockPoint.ci}:${challengeBlockPoint.si}:${challengeBlockPoint.sectionName}`;
-        if (_lastChallengeKey === prevKey) {
-            UI.log(`⚠ 闯关拦截点未推进：${challengeBlockPoint.chapterName} / ${challengeBlockPoint.sectionName}`, "err");
-            UI.log("已停止自动继续扫描以避免死循环。", "warn");
-            stopAutoScanLoop();
-            autoScanEnabled = false;
-            UI.setAutoScanEnabled(false);
-            return;
-        }
-        _lastChallengeKey = prevKey;
-
-        const _savedCi = Number(challengeBlockPoint.ci) || 0;
-        const _savedSi = Number(challengeBlockPoint.si) || 0;
-
-        // 不预检查，直接重新扫描拦截点所在小节；由 scanCourse 内部的 detectChallengeBlock
-        // 判断该小节是否仍被闯关限制。若仍被限制，scanCourse 会再次把 challengeBlockPoint
-        // 设为同一位置并返回；下次进入本函数时 prevKey 相同即自动停止，避免死循环。
-        UI.log(`➡ 从闯关拦截点重新扫描（第 ${_savedCi + 1} 章第 ${_savedSi + 1} 节）…`, "run");
-        scanItems = scanItems.filter(it => !it.isChallengeMarker);
-        challengeMode = false;
-        UI.setChallengeMode(false);
-        challengeBlockPoint = null;
-        await scanCourse(_savedCi, _savedSi, _recursiveSessionActive);
-    }
+    /* continueScanAfterChallenge 已由 Scheduler 的 waiting_lock 相位接管 */
 
     /* ============================================================
      * 【递归】
      * ============================================================ */
-    function resolveStartIndex(mode) {
-        const auto = _getSubmitMode() === "auto";
-        const markerIdx = findMarkerIdx();
-        const limit = markerIdx >= 0 ? markerIdx : scanItems.length;
-        const _skip = (it) => _sessionOkItems.has(_okKey(it));
-
-        /* 从 0 开始找第一个未完成的任务点（跳过闯关标记、非任务点、已完成、本次会话已处理） */
-        function _firstPendingIdx() {
-            for (let i = 0; i < limit; i++) {
-                const it = scanItems[i];
-                if (it.isChallengeMarker) continue;
-                if (!it.isTaskpoint) continue;
-                if (it.complete) continue;
-                if (_skip(it)) continue;
-                return i;
-            }
-            return -1;
-        }
-
-        /* auto 模式下，无论用户选的是 A 还是 B，都从第一个未完成项开始。
-           原因：mode B 从"最后一个已完成项之后"查找时，如果剩余未完成项位于更前面
-           （例如最后一个已完成视频是 1.5 节，而未完成项位于 1.5 之前的某个测验），
-           就会返回 -1，导致递归立即结束、表现为"点击开始递归无反应"。
-           auto 模式下目标是处理所有未完成项，从最早的开始最稳。 */
-        if (auto) return _firstPendingIdx();
-
-        if (mode === "A") return _firstPendingIdx();
-
-        /* 非 auto 的 mode B：先从最后一个已完成视频之后查找 */
-        if (lastDoneVideoIdx >= 0) {
-            for (let i = lastDoneVideoIdx + 1; i < limit; i++) {
-                const it = scanItems[i];
-                if (it.isChallengeMarker) continue;
-                if (!it.isTaskpoint) continue;
-                if (it.complete) continue;
-                if (_skip(it)) continue;
-                return i;
-            }
-            /* 断点之后无未完成项，回退到第一个未完成项，避免"点击无反应" */
-            const fb = _firstPendingIdx();
-            if (fb >= 0) return fb;
-            return -1;
-        }
-
-        return _firstPendingIdx();
-    }
 
     async function focusTaskpoint(item) {
+        const found = await findSectionByPath(item.path);
+        if (!found || !found.sectionLi) { UI.log(`❌ 路径定位失败：${item.path.join("/")}`, "err"); return null; }
+        let sectionLi = found.sectionLi;
+        item._ci = found.ci;
+        if (typeof found.si === "number" && found.si >= 0) item._si = found.si;
+        if (item._ri < 0) item._ri = 0;
+
         const root = document.querySelector("ul.rank-1");
-        if (!root) return null;
-        let ci = item._ci, si = item._si;
-        if (ci < 0 || si < 0) {
-            UI.log(`索引无效，按路径重新定位：${item.path.join("/")}`, "info");
-            const found = await findSectionByPath(item.path);
-            if (!found) { UI.log(`❌ 路径定位失败：${item.path.join("/")}`, "err"); return null; }
-            ci = found.ci; si = found.si;
-            item._ci = ci; item._si = si;
-            if (item._ri < 0) item._ri = 0;
-        }
         const chapterLIs = Array.from(root.children).filter(el => el.classList.contains("catalogItem"));
-        if (ci >= chapterLIs.length) return null;
-        const chapterLi = chapterLIs[ci];
-        if (ci !== _curCi) {
-            const chapterTitle = chapterLi.querySelector(":scope > .basic.chapter") || chapterLi.querySelector(":scope > .basic");
-            const r = await activateChapter(chapterLi, chapterTitle);
-            if (!r.activated) return null;
+        let ci = chapterLIs.indexOf(sectionLi.closest("li.catalogItem"));
+        if (ci >= 0 && ci !== _curCi) {
+            const chapterTitle = chapterLIs[ci].querySelector(":scope > .basic.chapter") || chapterLIs[ci].querySelector(":scope > .basic");
+            await activateChapter(chapterLIs[ci], chapterTitle);
             _curCi = ci; _curSi = -1;
         }
-        const ul2 = chapterLi.querySelector(":scope > ul.rank-2");
-        if (!ul2) return null;
-        const sectionLIs = Array.from(ul2.children);
-        if (si < 0 || si >= sectionLIs.length) return null;
-        const sectionLi = sectionLIs[si];
-        if (si !== _curSi) {
-            const sectionTitle = sectionLi.querySelector(":scope > .basic");
-            await activateSection(sectionLi, sectionTitle);
-            _curSi = si;
+
+        let sectionTitle = sectionLi.querySelector(":scope > .basic");
+        /* 【OPEN_SECTION_FIX】目标小节未激活时，优先用其 href 直接改路由。
+           click() 在“当前停在被锁小节(如5.4)”时可能不触发 $state 切换，导致 5.3 一直展开超时。
+           路由切换后节点会被重建，因此重新按 path 解析新节点。 */
+        if (sectionTitle && !sectionTitle.classList.contains("active")) {
+            const _href = sectionTitle.getAttribute("href");
+            if (_href) {
+                const _oldHash = location.hash;
+                try { location.hash = _href; } catch (e) {}
+                const _navDl = Date.now() + 3000;
+                while (Date.now() < _navDl) {
+                    await sleep(150);
+                    if (stopRequested) break;
+                    if (location.hash !== _oldHash) break;
+                    if (sectionLi.querySelector(":scope > .resourcelist")) break;
+                }
+                const _f2 = await findSectionByPath(item.path);
+                if (_f2 && _f2.sectionLi) {
+                    sectionLi = _f2.sectionLi;
+                    if (typeof _f2.ci === "number") item._ci = _f2.ci;
+                    if (typeof _f2.si === "number" && _f2.si >= 0) item._si = _f2.si;
+                    sectionTitle = sectionLi.querySelector(":scope > .basic") || sectionTitle;
+                }
+            }
         }
+        if (sectionTitle) {
+            /* 【修复】原实现不检查 activateSection 的返回值，展开超时（8 秒）后
+               直接读 .resourcelist 得到 null，导致"小节无资源列表"后跳过视频
+               （例如 scanCourse 结束到 startRecursive 启动之间的 600ms 间隙里，
+               Angular 把刚展开的小节重置了，重新展开需要更多时间）。
+               现在：首次超时后点一次标题重试，再等 6 秒；仍失败才返回 null。 */
+            let _act = await activateSection(sectionLi, sectionTitle);
+            if (!_act.activated) {
+                UI.log(`⚠ 小节首次展开超时，重试一次："${item.path[item.path.length-1]}"`, "warn");
+                /* 【修复】点击小节会触发 ui-sref 路由，Angular 重建目录后旧 sectionLi 会脱离 DOM
+                   （activateSection 因此很快返回 gone）。原重试仍查询已销毁的节点，永远等不到
+                   .resourcelist，最终误报"展开失败/无法定位任务点"。改为：节点失效就按 path 重新解析。 */
+                const _refetchSection = async () => {
+                    const _f = await findSectionByPath(item.path);
+                    if (_f && _f.sectionLi) {
+                        sectionLi = _f.sectionLi;
+                        if (typeof _f.ci === "number") item._ci = _f.ci;
+                        if (typeof _f.si === "number" && _f.si >= 0) item._si = _f.si;
+                        return true;
+                    }
+                    return false;
+                };
+                if (!sectionLi.isConnected) await _refetchSection();
+                let _title2 = sectionLi.querySelector(":scope > .basic") || sectionTitle;
+                try { _title2.click(); } catch (e) {}
+                const _retryDl = Date.now() + 8000;
+                while (Date.now() < _retryDl) {
+                    await sleep(200);
+                    if (stopRequested) break;
+                    if (!sectionLi.isConnected) {
+                        await _refetchSection();
+                        _title2 = sectionLi.querySelector(":scope > .basic") || sectionTitle;
+                        continue;
+                    }
+                    if (sectionLi.querySelector(":scope > .resourcelist")) { _act = { activated: true }; break; }
+                    if (detectChallengeBlock(sectionLi)) { _act = { activated: true }; break; }
+                }
+                if (!_act.activated) {
+                    UI.log(`❌ 小节展开失败（重试后仍超时）："${item.path[item.path.length-1]}"`, "err");
+                    return null;
+                }
+            }
+        }
+
         if (detectChallengeBlock(sectionLi)) {
             UI.log(`🛑 小节"${item.path[item.path.length-1]}"被闯关模式拦截`, "warn");
             return null;
@@ -8059,15 +9127,22 @@ textarea, pre, .report-body { flex: 1; background: #0d1117; color: #e6e6e6; bord
             const resources = Array.from(rl.querySelectorAll(":scope > .basic"));
             if (resources.length > 0) {
                 const ri = item._ri >= 0 ? item._ri : 0;
-                if (ri < resources.length) return resources[ri];
+                if (ri < resources.length && resources[ri]) {
+                    const _n0 = resources[ri].querySelector(".tag-source-name");
+                    const _t0 = _n0 ? (_n0.innerText || _n0.textContent || "").trim() : "";
+                    /* _ri 命中但类型不符时不要直接返回，防止把视频行当成测验行 */
+                    if (!_t0 || !item.type || _t0 === item.type) return resources[ri];
+                }
                 for (const r of resources) {
                     const nameSpan = r.querySelector(".tag-source-name");
-                    if (nameSpan && (nameSpan.innerText || "").trim() === item.name) return r;
+                    const _t = nameSpan ? (nameSpan.innerText || nameSpan.textContent || "").trim() : "";
+                    if (_t && (_t === item.type || _t === item.name)) return r;
                 }
-                return resources[0];
+                /* 找不到具体任务行时返回 null，绝不返回小节标题 */
+                return null;
             }
         }
-        return sectionLi.querySelector(":scope > .basic");
+        return null;
     }
 
     async function processNonVideoTaskpoint(item) {
@@ -8077,19 +9152,43 @@ textarea, pre, .report-body { flex: 1; background: #0d1117; color: #e6e6e6; bord
             return false;
         }
 
+        /* 与视频一致：先看任务点自身是否已完成，避免对已完成的测验重复答题。 */
+        if (el.classList.contains("complete")) {
+            if (!item.complete) {
+                item.complete = true;
+                try { _sessionOkItems.add(makeItemKey(item)); } catch (e) {}
+                try { UI.setScanResultText(scanItemsToText(scanItems)); } catch (e) {}
+                try { refreshAfterScanItemsChanged(); } catch (e) {}
+                try { scheduleSave(); } catch (e) {}
+                UI.log(`⏭ 检测到测验已完成，自动更新：${item.name}`, "info");
+            } else {
+                UI.log(`⏭ 页面显示测验已完成：${item.name}`, "debug");
+            }
+            return true;
+        }
+
         try { el.click(); } catch (e) {}
         await sleep(1500);
 
         if (item.type === "测验") {
-            /* 通知 UI：递归已运行到测验任务点。
-               按钮切回"智能答题（当前选中任务点）"，并显示题目处理进度。
-               无论 QuizSolver.start() 正常返回还是抛异常，最后都会复位。
-               QuizSolver.start() 内部会：
-                 - 写题目缓存（QuizCache.save）
-                 - 通过 onEvent('progress', ...) 更新按钮进度
-                 - 通过 onEvent('log', ...) 追加到智能闯关日志
-                 - 结束后按 _getSubmitMode() 的最新值决定是否自动提交 */
+            /* 进入后若已是“提交时间/得分”的结果页，同样按完成处理，不再打开 AI、不再重复提交。 */
+            if (isQuizSubmittedDoc(getQuizDoc())) {
+                item.complete = true;
+                try { _sessionOkItems.add(makeItemKey(item)); } catch (e) {}
+                try { UI.setScanResultText(scanItemsToText(scanItems)); } catch (e) {}
+                try { refreshAfterScanItemsChanged(); } catch (e) {}
+                try { syncTaskProgress(); } catch (e) {}
+                try { scheduleSave(); } catch (e) {}
+                UI.log(`⏭ 检测到测验已提交，按完成处理：${item.name}`, "info");
+                return true;
+            }
+            /* 递归进入测验时，除 setRecursiveAtQuiz(true) 外，
+               还要同步把按钮切入"答题中"态（setQuizButtonRunning(true)）。
+               原实现只调 setRecursiveAtQuiz，按钮仍显示"当前选中任务点"，
+               用户误以为可点击，实际被 onQuizToggleStart 的 running 守卫拦下，
+               UI 反馈与真实状态不一致。 */
             try { UI.setRecursiveAtQuiz(true); } catch (e) {}
+            try { UI.setQuizButtonRunning(true); } catch (e) {}
             try {
                 const questions = await waitForQuizLoaded(null, null, 30000);
                 if (questions.length === 0) {
@@ -8102,6 +9201,7 @@ textarea, pre, .report-body { flex: 1; background: #0d1117; color: #e6e6e6; bord
                 return !!(result && result.submitted);
             } finally {
                 try { UI.setRecursiveAtQuiz(false); } catch (e) {}
+                try { UI.setQuizButtonRunning(false); } catch (e) {}
             }
         }
 
@@ -8115,6 +9215,66 @@ textarea, pre, .report-body { flex: 1; background: #0d1117; color: #e6e6e6; bord
         if (!root || !path || path.length < 2) return null;
         const chapterLIs = Array.from(root.children).filter(el => el.classList.contains("catalogItem"));
         const chapterName = path[0], sectionName = path[1];
+
+        // 编号快路径：从 path[1] 的编号前缀直接定位，失败则回退原线性搜索
+        const _extractNum = (name) => {
+            const m = String(name || "").match(/^(\d+(?:[.]\d+)*)\s+/);
+            return m ? m[1] : "";
+        };
+        const _findLiByNum = (ul, num) => {
+            if (!ul || !num) return null;
+            for (const li of Array.from(ul.children)) {
+                const t = li.querySelector(":scope > .basic");
+                if (t && _extractNum(chapterNameOf(t)) === num) return li;
+            }
+            return null;
+        };
+        try {
+            const targetNum = _extractNum(sectionName);
+            const parts = targetNum ? targetNum.split(".") : [];
+            if (parts.length === 2 || parts.length === 3) {
+                const chapterNum = parts[0];
+                let chapterLi = null;
+                for (const li of chapterLIs) {
+                    const t = li.querySelector(":scope > .basic.chapter") || li.querySelector(":scope > .basic");
+                    if (t && _extractNum(chapterNameOf(t)) === chapterNum) { chapterLi = li; break; }
+                }
+                if (chapterLi) {
+                    const chapterTitle = chapterLi.querySelector(":scope > .basic.chapter") || chapterLi.querySelector(":scope > .basic");
+                    const ci = chapterLIs.indexOf(chapterLi);
+                    if ((await activateChapter(chapterLi, chapterTitle)).activated) {
+                        const ul2 = chapterLi.querySelector(":scope > ul.rank-2");
+                        if (ul2) {
+                            if (parts.length === 2) {
+                                const targetLi = _findLiByNum(ul2, targetNum);
+                                if (targetLi) return { ci, si: -1, sectionLi: targetLi };
+                            } else {
+                                const parentNum = parts.slice(0, 2).join(".");
+                                const parentLi = _findLiByNum(ul2, parentNum);
+                                if (parentLi) {
+                                    const parentTitle = parentLi.querySelector(":scope > .basic");
+                                    if (!parentLi.querySelector(":scope > ul") && parentTitle) {
+                                        try { parentTitle.click(); } catch (e) {}
+                                        const _dl = Date.now() + 4000;
+                                        while (Date.now() < _dl) {
+                                            await sleep(200);
+                                            if (parentLi.querySelector(":scope > ul")) break;
+                                            if (detectChallengeBlock(parentLi)) break;
+                                        }
+                                    }
+                                    const rank3 = parentLi.querySelector(":scope > ul");
+                                    if (rank3) {
+                                        const targetLi = _findLiByNum(rank3, targetNum);
+                                        if (targetLi) return { ci, si: -1, sectionLi: targetLi };
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        } catch (e) {}
+        // 慢路径兜底（原线性搜索）
         for (let ci = 0; ci < chapterLIs.length; ci++) {
             const chapterLi = chapterLIs[ci];
             const chapterTitle = chapterLi.querySelector(":scope > .basic.chapter") || chapterLi.querySelector(":scope > .basic");
@@ -8124,42 +9284,105 @@ textarea, pre, .report-body { flex: 1; background: #0d1117; color: #e6e6e6; bord
             if (!r.activated) continue;
             const ul2 = chapterLi.querySelector(":scope > ul.rank-2");
             if (!ul2) continue;
-            const sectionLIs = Array.from(ul2.children);
-            for (let si = 0; si < sectionLIs.length; si++) {
-                const sectionLi = sectionLIs[si];
-                const sectionTitle = sectionLi.querySelector(":scope > .basic");
-                if (!sectionTitle) continue;
-                if (chapterNameOf(sectionTitle) !== sectionName) continue;
-                return { ci, si, sectionLi };
+
+            async function searchUl(ul) {
+                for (const li of Array.from(ul.children)) {
+                    const sectionTitle = li.querySelector(":scope > .basic");
+                    if (sectionTitle && chapterNameOf(sectionTitle) === sectionName) {
+                        return li;
+                    }
+                    if (sectionTitle) {
+                        const hasRes = li.querySelector(":scope > .resourcelist");
+                        if (!hasRes) {
+                            try { sectionTitle.click(); } catch (e) {}
+                            await sleep(600);
+                        }
+                        const newSubUl = li.querySelector(":scope > ul");
+                        if (newSubUl) {
+                            const found = await searchUl(newSubUl);
+                            if (found) return found;
+                        }
+                    }
+                }
+                return null;
             }
+            const foundLi = await searchUl(ul2);
+            if (foundLi) return { ci, si: -1, sectionLi: foundLi };
         }
         return null;
     }
 
-    async function rescanCurrentSection(item) {
-        if (item._ci < 0 || item._si < 0) return;
-        const root = document.querySelector("ul.rank-1");
-        if (!root) return;
-        const chapterLIs = Array.from(root.children).filter(el => el.classList.contains("catalogItem"));
-        const chapterLi = chapterLIs[item._ci];
-        if (!chapterLi) return;
-        const ul2 = chapterLi.querySelector(":scope > ul.rank-2");
-        if (!ul2) return;
-        const sectionLi = ul2.children[item._si];
-        if (!sectionLi) return;
-        const rl = sectionLi.querySelector(":scope > .resourcelist");
-        if (!rl) return;
+    async function rescanCurrentSection(item, opts) {
+        const keepComplete = !!(opts && opts.keepComplete);
+        const keepKey = keepComplete ? makeItemKey(item) : "";
+        const found = await findSectionByPath(item.path);
+        if (!found || !found.sectionLi) return;
+        const sectionLi = found.sectionLi;
+        let rl = sectionLi.querySelector(":scope > .resourcelist");
+        /* 小节可能未展开（只有当前激活小节会渲染 resourcelist），先点击展开再读 */
+        if (!rl) {
+            const _secTitle = sectionLi.querySelector(":scope > .basic");
+            if (_secTitle) {
+                try { _secTitle.click(); } catch (e) {}
+                const _dl = Date.now() + 5000;
+                while (Date.now() < _dl) {
+                    await sleep(200);
+                    if (stopRequested) return;
+                    rl = sectionLi.querySelector(":scope > .resourcelist");
+                    if (rl) break;
+                    if (detectChallengeBlock(sectionLi)) break;
+                }
+            }
+        }
+        if (!rl) {
+            /* 展开失败（或被锁）时，若小节 DOM 是 uncomplete，
+               则把该小节的所有任务点回退为未完成，避免缓存误标完成 */
+            const _secTitle2 = sectionLi.querySelector(":scope > .basic");
+            const _secComplete = _secTitle2 ? _secTitle2.classList.contains("complete") : false;
+            if (!_secComplete) {
+                let _fallbackChanged = 0;
+                for (const _it of scanItems) {
+                    if (_it.isChallengeMarker) continue;
+                    if (keepComplete && makeItemKey(_it) === keepKey) continue;
+                    if (_it.path.join("/") === item.path.join("/") && _it.complete) {
+                        _it.complete = false;
+                        _fallbackChanged++;
+                    }
+                }
+                if (_fallbackChanged > 0) {
+                    UI.setScanResultText(scanItemsToText(scanItems));
+                    refreshAfterScanItemsChanged();
+                    UI.log(`本小节重扫：小节未完成且无资源列表，回退 ${_fallbackChanged} 个任务点状态`, "warn");
+                    scheduleSave();
+                }
+            }
+            return;
+        }
         const resources = Array.from(rl.querySelectorAll(":scope > .basic"));
         let changed = 0;
         for (let ri = 0; ri < resources.length; ri++) {
             const isComplete = resources[ri].classList.contains("complete");
+            const _nameEl = resources[ri].querySelector(".tag-source-name");
+            const _domType = _nameEl ? (_nameEl.innerText || _nameEl.textContent || "").trim() : "";
+            let target = null;
             for (const it of scanItems) {
                 if (it.isChallengeMarker) continue;
-                if (it._ci === item._ci && it._si === item._si && it._ri === ri) {
-                    if (it.complete !== isComplete) { it.complete = isComplete; changed++; }
-                    break;
-                }
+                if (it.path.join("/") !== item.path.join("/")) continue;
+                if (it._ri === ri) { target = it; break; }
+                /* 文本映射后 _ri 可能是 -1：按 DOM 里的类型回退匹配 */
+                if (it._ri < 0 && _domType && it.type === _domType) { target = it; break; }
             }
+            if (!target) continue;
+            if (target._ri < 0) target._ri = ri;
+            if (keepComplete && makeItemKey(target) === keepKey && !isComplete) {
+                try { UI.log(`本小节重扫：${target.name} 平台状态尚未刷新，暂不回退`, "debug"); } catch (e) {}
+                continue;
+            }
+            /* 刚由脚本完成、平台目录还没刷新时，保留 Y，避免“完成→重扫改回→再处理”死循环 */
+            if (_sessionOkItems.has(makeItemKey(target)) && target.complete && !isComplete) {
+                continue;
+            }
+            if (target.complete !== isComplete) { target.complete = isComplete; changed++; }
         }
         if (changed > 0) {
             UI.setScanResultText(scanItemsToText(scanItems));
@@ -8238,163 +9461,33 @@ textarea, pre, .report-body { flex: 1; background: #0d1117; color: #e6e6e6; bord
             video = getVideoEl();
             if (!video) { UI.log("❌ 未找到播放器，跳过", "err"); return false; }
         }
-        const ok = await waitVideoEnd();
-        if (ok) UI.log(`✅ 完成：${item.name}`, "ok");
-        else UI.log(`⚠ 未正常结束：${item.name}`, "warn");
-        return ok;
+        const played = await waitVideoEnd();
+        if (!played) {
+            UI.log(`⚠ 未正常结束：${item.name}`, "warn");
+            return false;
+        }
+        /* 平台在播放结束时即时更新状态，不再轮询 DOM 的 complete 类；
+           且路由/列表重渲染后旧 el 引用可能已失效，"等 complete"实际永远等不到。 */
+        UI.log(`✅ 视频已播完，视为完成：${item.name}`, "ok");
+        return true;
     }
 
-    async function startRecursive(mode) {
-        if (running) { UI.log("递归已在运行中", "warn"); return; }
-        if (!scanItems.length) { UI.log("❌ 尚未扫描，无法开始", "err"); return; }
 
-        const MAX_AUTO_RETRY = 3;
-        let autoRetryCount = 0;
-        let currentMode = mode;
 
-        running = true;
-        stopRequested = false;
-        _curCi = -1; _curSi = -1;
-        _sessionOkItems = new Set();
-        UI.setRunning(true);
-        try { UI.setRecursiveAtQuiz(false); } catch (e) {}
 
-        while (true) {
-            const startIdx = resolveStartIndex(currentMode);
-            if (startIdx < 0) {
-                if (autoRetryCount === 0) {
-                    UI.log("ℹ 无可递归的起点（可能已全部完成或仅剩闯关限制）", "warn");
-                } else {
-                    UI.log("ℹ 自动重试时无可递归的起点，流程结束", "info");
-                }
-                break;
-            }
 
-            const startItem = scanItems[startIdx];
-            syncTaskProgress();
-            UI.setStatus("递归运行中…");
-            if (autoRetryCount === 0) {
-                UI.log(`🚀 递归开始（模式 ${currentMode}），起点：第 ${startIdx + 1} 项 —— ${startItem ? startItem.name : "?"}`, "run");
-            } else {
-                UI.log(`🔄 自动重试递归（第 ${autoRetryCount}/${MAX_AUTO_RETRY} 次，模式 A），起点：第 ${startIdx + 1} 项 —— ${startItem ? startItem.name : "?"}`, "run");
-            }
 
-            let hitChallengeMarker = false;
-            let pausedByUser = false;
-
-            for (let i = startIdx; i < scanItems.length; i++) {
-                if (stopRequested) { UI.log("⏹ 递归已被手动暂停", "warn"); pausedByUser = true; break; }
-                const item = scanItems[i];
-                if (item.isChallengeMarker) { UI.log("🛑 遇到闯关限制标记，停止当前递归", "warn"); hitChallengeMarker = true; break; }
-                if (!item.isTaskpoint) continue;
-                if (item.complete) continue;
-                if (_sessionOkItems.has(_okKey(item))) continue;
-
-                if (item.isVideo) {
-                    const ok = await playTaskpoint(item);
-                    if (ok) {
-                        _sessionOkItems.add(_okKey(item));
-                        item.complete = true;
-                        UI.setScanResultText(scanItemsToText(scanItems));
-                        await rescanCurrentSection(item);
-                        syncTaskProgress();
-                        scheduleSave();
-                    }
-                } else {
-                    if (_getSubmitMode() === "auto") {
-                        UI.log(`▶ 处理任务点（${item.type}）：${item.name}`, "run");
-                        const ok = await processNonVideoTaskpoint(item);
-                        if (ok) {
-                            _sessionOkItems.add(_okKey(item));
-                            item.complete = true;
-                            UI.setScanResultText(scanItemsToText(scanItems));
-                            await rescanCurrentSection(item);
-                            syncTaskProgress();
-                            scheduleSave();
-                        }
-                    } else {
-                        UI.log(`⏭ 跳过非视频（${item.type}）：${item.name}`, "info");
-                    }
-                }
-            }
-
-            if (pausedByUser || stopRequested) break;
-            if (!hitChallengeMarker) break;
-
-            /* 遇到闯关限制标记：检查断点之前是否仍有未完成任务点 */
-            const markerIdxNow = findMarkerIdx();
-            const limitNow = markerIdxNow >= 0 ? markerIdxNow : scanItems.length;
-
-            function _countPending() {
-                let n = 0;
-                for (let i = 0; i < limitNow; i++) {
-                    const it = scanItems[i];
-                    if (it.isChallengeMarker) continue;
-                    if (!it.isTaskpoint) continue;
-                    if (it.complete) continue;
-                    if (_sessionOkItems.has(_okKey(it))) continue;
-                    n++;
-                }
-                return n;
-            }
-
-            let pendingBefore = _countPending();
-            if (pendingBefore === 0) {
-                UI.log("ℹ 断点之前已无未完成任务点，递归正常结束", "info");
-                break;
-            }
-
-            if (autoRetryCount >= MAX_AUTO_RETRY) {
-                UI.log(`⚠ 断点之前仍有 ${pendingBefore} 个未完成任务点，但已自动重试 ${MAX_AUTO_RETRY} 次，停止自动重试`, "warn");
-                break;
-            }
-
-            /* 先重扫断点之前的相关小节，尽量让 DOM 状态同步 */
-            UI.log(`🔍 断点之前仍有 ${pendingBefore} 个未完成任务点，先重扫相关小节…`, "info");
-            try {
-                for (let i = 0; i < limitNow; i++) {
-                    const it = scanItems[i];
-                    if (it.isChallengeMarker) continue;
-                    if (!it.isTaskpoint) continue;
-                    if (it.complete) continue;
-                    if (_sessionOkItems.has(_okKey(it))) continue;
-                    try { await rescanCurrentSection(it); } catch (e) {}
-                }
-            } catch (e) {}
-
-            let pendingAfter = _countPending();
-            if (pendingAfter === 0) {
-                UI.log("✅ 重扫后所有任务点已完成，递归正常结束", "ok");
-                break;
-            }
-
-            autoRetryCount++;
-            currentMode = "A";
-            UI.log(`🔄 重扫后仍有 ${pendingAfter} 个未完成任务点，自动从第一个未完成任务点重新递归…`, "info");
-            await sleep(1500);
-            _curCi = -1; _curSi = -1;
-        }
-
-        running = false;
-        UI.setRunning(false);
-        refreshAfterScanItemsChanged();
-        UI.setStatus(stopRequested ? "已暂停" : "递归结束");
-        UI.log(stopRequested ? "⏸ 递归已暂停" : "🏁 递归流程结束", stopRequested ? "warn" : "ok");
-        saveScanCache();
-        if (challengeMode && autoScanEnabled && !autoScanTimer && !scanning && !recordQuizRunning) {
-            setTimeout(() => {
-                if (!running && !scanning && !autoScanTimer) {
-                    startAutoScanLoop();
-                    UI.log("▶ 递归结束后已自动恢复完成状态检查", "info");
-                }
-            }, 1500);
-        }
-    }
 
     /* ============================================================
      * 【记录已完成测验】
      * ============================================================ */
     function readSelectedAnswer(q) {
+        /* ⚠ 填空：结果页可能没有 textarea，取不到就继续走 answerBox */
+        if (resolveKind(q) === "blank") {
+            const tas = Array.from(q.boxEl.querySelectorAll("textarea.ue-container1"));
+            const vals = tas.map(t => String(t.value || "").trim()).filter(Boolean);
+            if (vals.length) return vals.join("；");
+        }
         try {
             const answerBox = q.boxEl.querySelector(".answerBox");
             if (answerBox) {
@@ -8660,104 +9753,71 @@ textarea, pre, .report-body { flex: 1; background: #0d1117; color: #e6e6e6; bord
     /* ============================================================
      * 【UI 回调】
      * ============================================================ */
-    UI.onStart(async () => {
-        if (running) {
-            stopRequested = true;
-            _recursiveSessionActive = false;
-            const video = getVideoEl();
-            if (video && !video.paused) { try { video.pause(); } catch (e) {} }
-            UI.log("⏸ 用户请求暂停", "warn");
-            UI.setStatus("递归已暂停");
-            return;
-        }
-        if (scanning) { UI.log("扫描中，请稍候…", "warn"); return; }
-        if (recordQuizRunning) { UI.log("记录已完成测验进行中，请稍候…", "warn"); return; }
-        if (UI.isQuizButtonRunning && UI.isQuizButtonRunning()) { UI.log("智能答题进行中，请稍候…", "warn"); return; }
+    
+UI.onStart(async () => {
+    if (Scheduler.phase === "processing" || Scheduler.phase === "scanning") {
+        const video = getVideoEl();
+        if (video && !video.paused) { try { video.pause(); } catch (e) {} }
+        Scheduler.pause();
+        UI.log("⏸ 用户请求暂停", "warn");
+        UI.setStatus("已暂停");
+        return;
+    }
+    if (Scheduler.phase === "waiting_lock" || Scheduler.phase === "verifying") Scheduler.pause();
+    if (recordQuizRunning) { UI.log("记录已完成测验进行中，请稍候…", "warn"); return; }
+    if (UI.isQuizButtonRunning && UI.isQuizButtonRunning()) { UI.log("智能答题进行中，请稍候…", "warn"); return; }
+    const mode = (typeof UI.getSelectedOption === "function" && UI.getSelectedOption()) || "A";
+    Scheduler.start(mode);
+});
 
-        _lastChallengeKey = null;
-        _recursiveSessionActive = true;
+    
+UI.onRescan(async () => {
+    if (Scheduler.phase === "processing" || Scheduler.phase === "scanning") { UI.log("任务运行中，无法扫描", "warn"); return; }
+    if (Scheduler.phase === "waiting_lock" || Scheduler.phase === "verifying") Scheduler.pause();
+    if (recordQuizRunning) { UI.log("记录已完成测验进行中，无法扫描", "warn"); return; }
+    if (UI.isQuizButtonRunning && UI.isQuizButtonRunning()) { UI.log("智能答题进行中，无法扫描", "warn"); return; }
+    Scheduler.pause();
+    challengeMode = false; challengeBlockPoint = null;
+    scanItems = [];
+    autoScanEnabled = true;
+    _cacheRestored = false; _lastSavedHash = null;
+    UI.setAutoScanEnabled(true);
+    UI.setStatus("重新扫描中…");
+    UI.resetQuizButton();
+    try { await scanCourse(0, 0, false); } finally {}
+});
 
-        if (!scanItems.length) {
-            UI.log("当前扫描结果为空，将先进行扫描…", "info");
-            suspendAutoScanForMutex();
-            try { await scanCourse(); } finally {}
-            if (!scanItems.length) {
-                UI.log("❌ 扫描完成但未发现任务点", "err");
-                resumeAutoScanAfterMutex();
-                return;
-            }
-        } else {
-            UI.log(`使用当前扫描结果（共 ${scanItems.length} 个任务点）开始递归`, "info");
-        }
+    
+UI.onUpdateScan(async () => {
+    if (schedulerMutex().any) { UI.log("其他任务进行中，无法更新扫描结果", "warn"); return; }
+    const text = UI.getScanResultText();
+    const parsed = parseScanTextV3(text);
+    if (parsed.errors.length) UI.log("⚠ 有 " + parsed.errors.length + " 行无法解析，已保留原结构：" + parsed.errors.slice(0, 3).join(" | "), "warn");
+    const merged = mergeScanItemsBySeq(parsed.items, scanItems, { resolveRid: () => -1 });
+    for (const k of merged.removed.map(makeItemKey)) {
+        try { _sessionOkItems.delete(k); } catch (e) {}
+        try { _gaveUpItems.delete(k); } catch (e) {}
+    }
+    const hasMarker = parsed.items.some(it => it.isChallengeMarker);
+    if (!hasMarker) { challengeMode = false; challengeBlockPoint = null; }
+    scanItems = _dedupeScanItems(merged.items);
+    assignSeqV3(scanItems);
+    _cacheRestored = true;
+    UI.setScanItemsEmpty(scanItems.length === 0);
+    UI.setScanResultText(scanItemsToText(scanItems));
+    try { refreshAfterScanItemsChanged(); } catch (e) {}
+    try { syncTaskProgress(); } catch (e) {}
+    saveScanCache();
+    UI.log(`✅ 更新成功：共 ${scanItems.filter(it => !it.isChallengeMarker).length} 个任务点`, "ok");
+});
 
-        const mode = UI.getSelectedOption();
-        if (!mode) { UI.log("❌ 未选择有效的递归模式", "err"); resumeAutoScanAfterMutex(); return; }
-        UI.log(`用户选择递归模式：${mode === "A" ? "从第一个未完成视频开始" : "从最后一个已完成视频之后开始"}`, "run");
-
-        suspendAutoScanForMutex();
-        try { await startRecursive(mode); } finally { resumeAutoScanAfterMutex(); }
-    });
-
-    UI.onRescan(async () => {
-        if (running) { UI.log("递归运行中，无法扫描", "warn"); return; }
-        if (scanning) { UI.log("扫描进行中…", "warn"); return; }
-        if (recordQuizRunning) { UI.log("记录已完成测验进行中，无法扫描", "warn"); return; }
-        if (UI.isQuizButtonRunning && UI.isQuizButtonRunning()) { UI.log("智能答题进行中，无法扫描", "warn"); return; }
-
-        suspendAutoScanForMutex();
-        stopAutoScanLoop();
-        challengeMode = false;
-        challengeBlockPoint = null;
-        scanItems = [];
-        autoScanEnabled = true;
-        _cacheRestored = false;
-        _lastSavedHash = null;
-        _lastChallengeKey = null;
-        _recursiveSessionActive = false;
-        UI.setAutoScanEnabled(true);
-        UI.setStatus("重新扫描中…");
-        UI.resetQuizButton();
-        try { await scanCourse(0, 0, false); } finally { UI.setStatus("待机（未扫描）"); resumeAutoScanAfterMutex(); }
-    });
-
-    UI.onUpdateScan(() => {
-        if (running || scanning || recordQuizRunning) { UI.log("其他任务进行中，无法更新扫描结果", "warn"); return; }
-        if (UI.isQuizButtonRunning && UI.isQuizButtonRunning()) { UI.log("智能答题进行中，无法更新扫描结果", "warn"); return; }
-        const text = UI.getScanResultText();
-        const newItems = textToScanItems(text);
-        const merged = mergeIndexes(newItems, scanItems);
-        scanItems = merged;
-        _cacheRestored = true;
-        _lastChallengeKey = null;
-        UI.setScanItemsEmpty(scanItems.length === 0);
-        if (!scanItems.some(it => it.isChallengeMarker)) {
-            challengeMode = false;
-            challengeBlockPoint = null;
-            stopAutoScanLoop();
-        } else {
-            challengeMode = true;
-        }
-        rebuildChapterStatusFromScanItems();
-        refreshAfterScanItemsChanged();
-        UI.log(`✅ 更新成功：共 ${scanItems.filter(it => !it.isChallengeMarker).length} 个任务点`, "ok");
-        saveScanCache();
-    });
-
-    UI.onAutoScanToggle((on) => {
-        autoScanEnabled = on;
-        UI.log(`自动更新完成状态已${on ? "开启" : "关闭"}`, "info");
-        if (on) {
-            if (challengeMode) {
-                if (!running && !scanning && !recordQuizRunning && !(UI.isQuizButtonRunning && UI.isQuizButtonRunning())) startAutoScanLoop();
-                else UI.log("自动更新将在当前任务结束后启动", "info");
-            } else {
-                UI.log("提示：当前尚未检测到闯关限制，自动更新将在检测到闯关后自动开始", "warn");
-            }
-        } else {
-            stopAutoScanLoop();
-        }
-        scheduleSave();
-    });
+    
+UI.onAutoScanToggle((on) => {
+    autoScanEnabled = on;
+    try { UI.setAutoScanEnabled(on); } catch (e) {}
+    if (on) AutoSync.start(); else AutoSync.stop();
+    scheduleSave();
+});
 
     UI.onClearCache(() => {
         if (clearScanCache()) {
@@ -8809,6 +9869,108 @@ textarea, pre, .report-body { flex: 1; background: #0d1117; color: #e6e6e6; bord
             await QuizSolver.start();
             UI.setQuizButtonCompleted();
             UI.setQuizStatus("已完成");
+            /* 【同步修复】智能答题只写了 QuizCache，不更新 scanItems，
+               导致进度条、"任务选择"信息与平台 DOM 不一致。
+               这里按当前测验标题在 scanItems 里宽松匹配未完成的测验项，标记 complete，
+               并刷新 UI 进度条、序列化文本、保存缓存。 */
+            try {
+                const _tpInfo = getTaskpointInfo();
+                const _curTitle = String((_tpInfo && _tpInfo.title) || "").trim();
+                /* 名称归一化：去掉“第N节”、空白、全/半角冒号、括号等，
+                   否则“5.2 探索爱：依恋风格”和“5.2 第2节 探索爱：依恋风格”永远匹配不上。 */
+                const _normName = (s) => String(s || "")
+                    .replace(/\s+/g, "")
+                    .replace(/第[0-9一二三四五六七八九十百]+节/g, "")
+                    .replace(/[：:]/g, "")
+                    .replace(/[（）()【】\[\]]/g, "")
+                    .trim();
+
+                if (scanItems.length === 0) {
+                    UI.log("⚠ 智能答题完成，但当前没有扫描结果；请先扫描后再同步", "warn");
+                } else if (!_curTitle) {
+                    UI.log("⚠ 智能答题完成，但未获取到当前任务点标题，无法同步扫描结果", "warn");
+                } else {
+                    const _curN = _normName(_curTitle);
+                    let _matched = false;
+                    let _matchedComplete = false;
+                    let _hit = null;
+
+                    for (const _it of scanItems) {
+                        if (_it.isChallengeMarker) continue;
+                        if (_it.type !== "测验") continue;
+                        const _nm = String(_it.name || "").trim();
+                        if (!_nm) continue;
+                        const _nmN = _normName(_nm);
+                        const _same =
+                            _curTitle === _nm || _curTitle.includes(_nm) || _nm.includes(_curTitle) ||
+                            (_curN && _nmN && (_curN === _nmN || _curN.includes(_nmN) || _nmN.includes(_curN)));
+                        if (!_same) continue;
+
+                        _hit = _it;
+                        if (_it.complete) {
+                            /* 已完成的项也要算命中；否则重做已完成测验时必然误报“未定位” */
+                            _matchedComplete = true;
+                        } else {
+                            _it.complete = true;
+                            _matched = true;
+                        }
+                        break;
+                    }
+
+                    /* 标题匹配失败时，用当前激活小节的 .resourcelist 回退：
+                       只有当前小节会渲染 resourcelist，取其中“测验”行的 _ri，
+                       再用 path 末段 + 类型 + _ri 精确定位。 */
+                    if (!_hit) {
+                        try {
+                            const _rl = document.querySelector("#catologOuter .resourcelist");
+                            if (_rl) {
+                                const _secLi = _rl.closest("li");
+                                const _secTitleEl = _secLi ? _secLi.querySelector(":scope > .basic .oneline") : null;
+                                const _secName = _secTitleEl ? String(_secTitleEl.innerText || _secTitleEl.textContent || "").trim() : "";
+                                const _rows = Array.from(_rl.querySelectorAll(":scope > .basic"));
+                                let _quizRi = _rows.findIndex(r => {
+                                    const n = r.querySelector(".tag-source-name");
+                                    return n && String(n.innerText || n.textContent || "").trim() === "测验";
+                                });
+                                if (_quizRi < 0) {
+                                    _quizRi = _rows.findIndex(r => r.classList.contains("active"));
+                                }
+                                if (_quizRi >= 0) {
+                                    const _secN = _normName(_secName);
+                                    for (const _it of scanItems) {
+                                        if (_it.isChallengeMarker || _it.type !== "测验") continue;
+                                        const _p = Array.isArray(_it.path) ? _it.path : [];
+                                        const _last = _normName(_p[_p.length - 1] || "");
+                                        if (_it._ri === _quizRi && (!_secN || !_last || _last === _secN)) {
+                                            _hit = _it;
+                                            if (_it.complete) {
+                                                _matchedComplete = true;
+                                            } else {
+                                                _it.complete = true;
+                                                _matched = true;
+                                            }
+                                            break;
+                                        }
+                                    }
+                                }
+                            }
+                        } catch (_fallbackErr) {}
+                    }
+
+                    if (_matched) {
+                        UI.setScanResultText(scanItemsToText(scanItems));
+                        syncTaskProgress();
+                        scheduleSave();
+                        UI.log(`✅ 智能答题完成，已同步任务点状态：${_hit ? _hit.name : _curTitle}`, "ok");
+                    } else if (_matchedComplete) {
+                        UI.log(`✅ 该任务点已是完成状态：${_hit ? _hit.name : _curTitle}`, "info");
+                    } else {
+                        UI.log("⚠ 智能答题完成，但未在扫描结果中定位到对应任务点（可点「重新扫描」刷新）", "warn");
+                    }
+                }
+            } catch (_syncErr) {
+                UI.log(`⚠ 智能答题完成同步扫描结果时异常：${_syncErr && _syncErr.message ? _syncErr.message : _syncErr}`, "warn");
+            }
         } catch (e) {
             UI.appendQuizLog(`流程异常：${e.message}`, "err");
             UI.setQuizStatus("异常终止");
@@ -8841,13 +10003,13 @@ textarea, pre, .report-body { flex: 1; background: #0d1117; color: #e6e6e6; bord
      * 【启动】
      * ============================================================ */
     function init() {
-        UI.log("脚本已加载 v1.0.3.e", "ok");
+        UI.log("脚本已加载 v1.0.4.e", "ok");
 
         applyMobileView(getSettings().mobileView);
         applyForceAspect(getSettings().forceAspect);
 
         try {
-            UI.setQuizSubmitMode(_getSubmitMode());
+            UI.setQuizSubmitMode(_getSubmitMode(), true);
         } catch (e) {}
 
         if (_isNewPage) {
@@ -8904,4 +10066,8 @@ textarea, pre, .report-body { flex: 1; background: #0d1117; color: #e6e6e6; bord
     } else {
         init();
     }
+
+    /* 初始化：按当前配置启动自动更新（最低优先级，忙时隐藏） */
+    // [AUTO_SYNC_INIT]
+    try { if (typeof autoScanEnabled !== "undefined" && autoScanEnabled && typeof AutoSync !== "undefined") AutoSync.start(); } catch (e) {}
 })();
